@@ -52,12 +52,25 @@ impl World {
                         if let Some(below) = self.get_cell(x, y + 1) {
                             if below == Cell::Air {
                                 self.next_cells[Self::coord_to_index(x, y + 1)] = Cell::Sand;
-                            } else {
-                                self.next_cells[Self::coord_to_index(x, y)] = Cell::Sand;
+                                continue;
                             }
-                        } else {
-                            self.next_cells[Self::coord_to_index(x, y)] = Cell::Sand;
                         }
+
+                        if let Some(below_right) = self.get_cell(x + 1, y + 1) {
+                            if below_right == Cell::Air {
+                                self.next_cells[Self::coord_to_index(x + 1, y + 1)] = Cell::Sand;
+                                continue;
+                            }
+                        }
+
+                        if let Some(below_right) = self.get_cell(x - 1, y + 1) {
+                            if below_right == Cell::Air {
+                                self.next_cells[Self::coord_to_index(x - 1, y + 1)] = Cell::Sand;
+                                continue;
+                            }
+                        }
+
+                        self.next_cells[Self::coord_to_index(x, y)] = Cell::Sand;
                     }
                 }
             }
