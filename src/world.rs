@@ -14,32 +14,50 @@ impl World {
     const HEIGHT: usize = 48;
 
     pub fn new() -> Self {
-        let mut cells = [Cell::Air; Self::WIDTH * Self::HEIGHT];
-        cells[Self::coord_to_index(32, 0)] = Cell::Sand;
-
         Self {
-            cells,
+            cells: [Cell::Air; Self::WIDTH * Self::HEIGHT],
             next_cells: [Cell::Air; Self::WIDTH * Self::HEIGHT],
         }
+    }
+
+    pub fn get_cell(&self, x: usize, y: usize) -> Option<Cell> {
+        if x >= Self::WIDTH || y >= Self::HEIGHT {
+            return None;
+        }
+
+        Some(self.cells[Self::coord_to_index(x, y)])
+    }
+
+    pub fn set_cell(&mut self, x: usize, y: usize, cell: Cell) {
+        if x >= Self::WIDTH || y >= Self::HEIGHT {
+            return;
+        }
+
+        self.cells[Self::coord_to_index(x, y)] = cell;
     }
 
     pub fn update(&mut self) {
         self.next_cells = [Cell::Air; Self::WIDTH * Self::HEIGHT];
         for x in 0..Self::WIDTH {
             for y in 0..Self::HEIGHT {
-                let cell = self.cells[Self::coord_to_index(x, y)];
+                let cell = self.get_cell(x, y);
+                if cell.is_none() {
+                    continue;
+                }
+                let cell = cell.unwrap();
+
                 match cell {
                     Cell::Air => {}
                     Cell::Sand => {
-                        if y < Self::HEIGHT - 1 {
-                            let below = self.cells[Self::coord_to_index(x, y + 1)];
+                        if let Some(below) = self.get_cell(x, y + 1) {
                             if below == Cell::Air {
                                 self.next_cells[Self::coord_to_index(x, y + 1)] = Cell::Sand;
+                            } else {
+                                self.next_cells[Self::coord_to_index(x, y)] = Cell::Sand;
                             }
-                            continue;
+                        } else {
+                            self.next_cells[Self::coord_to_index(x, y)] = Cell::Sand;
                         }
-
-                        self.next_cells[Self::coord_to_index(x, y)] = Cell::Sand;
                     }
                 }
             }

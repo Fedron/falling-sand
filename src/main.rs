@@ -55,6 +55,14 @@ fn main() -> Result<(), Error> {
                 return;
             }
 
+            if input.mouse_held(0) {
+                if let Some((x, y)) = input.mouse() {
+                    let x = (x / 10.0) as usize;
+                    let y = (y / 10.0) as usize;
+                    world.set_cell(x, y, world::Cell::Sand)
+                }
+            }
+
             if let Some(size) = input.window_resized() {
                 if let Err(err) = pixels.resize_surface(size.width, size.height) {
                     log_error("pixels.resize_surface", err);
