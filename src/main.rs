@@ -66,7 +66,7 @@ fn main() -> Result<(), Error> {
                         y,
                         Cell {
                             id: cell::CellId::Sand,
-                            color: cell::CellId::Sand.base_color(),
+                            color: cell::CellId::Sand.varied_color(),
                         },
                     );
                 }
