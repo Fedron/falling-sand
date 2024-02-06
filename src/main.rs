@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 use crate::world::World;
+use cell::Cell;
 use error_iter::ErrorIter as _;
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
@@ -13,6 +14,7 @@ use winit::{
 };
 use winit_input_helper::WinitInputHelper;
 
+mod cell;
 mod world;
 
 fn main() -> Result<(), Error> {
@@ -59,7 +61,14 @@ fn main() -> Result<(), Error> {
                 if let Some((x, y)) = input.mouse() {
                     let x = (x / 10.0) as usize;
                     let y = (y / 10.0) as usize;
-                    world.set_cell(x, y, world::Cell::Sand)
+                    world.set_cell(
+                        x,
+                        y,
+                        Cell {
+                            id: cell::CellId::Sand,
+                            color: cell::CellId::Sand.base_color(),
+                        },
+                    );
                 }
             }
 

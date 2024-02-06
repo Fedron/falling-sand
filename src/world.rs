@@ -1,8 +1,4 @@
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Cell {
-    Air = 0,
-    Sand = 1,
-}
+use crate::cell::{Cell, CellId};
 
 pub struct World {
     cells: [Cell; World::WIDTH * World::HEIGHT],
@@ -15,8 +11,8 @@ impl World {
 
     pub fn new() -> Self {
         Self {
-            cells: [Cell::Air; Self::WIDTH * Self::HEIGHT],
-            next_cells: [Cell::Air; Self::WIDTH * Self::HEIGHT],
+            cells: [Cell::AIR; Self::WIDTH * Self::HEIGHT],
+            next_cells: [Cell::AIR; Self::WIDTH * Self::HEIGHT],
         }
     }
 
@@ -25,7 +21,7 @@ impl World {
             return None;
         }
 
-        Some(self.cells[Self::coord_to_index(x, y)])
+        Some(self.cells[Self::coord_to_index(x, y)].clone())
     }
 
     pub fn set_cell(&mut self, x: usize, y: usize, cell: Cell) {
@@ -37,7 +33,7 @@ impl World {
     }
 
     pub fn update(&mut self) {
-        self.next_cells = [Cell::Air; Self::WIDTH * Self::HEIGHT];
+        self.next_cells = [Cell::AIR; Self::WIDTH * Self::HEIGHT];
         for x in 0..Self::WIDTH {
             for y in 0..Self::HEIGHT {
                 let cell = self.get_cell(x, y);
@@ -46,13 +42,13 @@ impl World {
                 }
                 let cell = cell.unwrap();
 
-                match cell {
-                    Cell::Air => {}
-                    Cell::Sand => {
+                match cell.id {
+                    CellId::Air => {}
+                    CellId::Sand => {
                         if let Some(below) = self.get_cell(x, y.saturating_add(1)) {
-                            if below == Cell::Air {
+                            if below.id == CellId::Air {
                                 self.next_cells[Self::coord_to_index(x, y.saturating_add(1))] =
-                                    Cell::Sand;
+                                    cell.clone();
                                 continue;
                             }
                         }
@@ -60,33 +56,33 @@ impl World {
                         if let Some(below_right) =
                             self.get_cell(x.saturating_add(1), y.saturating_add(1))
                         {
-                            if below_right == Cell::Air {
+                            if below_right.id == CellId::Air {
                                 self.next_cells[Self::coord_to_index(
                                     x.saturating_add(1),
                                     y.saturating_add(1),
-                                )] = Cell::Sand;
+                                )] = cell.clone();
                                 continue;
                             }
                         }
 
-                        if let Some(below_right) =
+                        if let Some(below_left) =
                             self.get_cell(x.saturating_sub(1), y.saturating_add(1))
                         {
-                            if below_right == Cell::Air {
+                            if below_left.id == CellId::Air {
                                 self.next_cells[Self::coord_to_index(
                                     x.saturating_sub(1),
                                     y.saturating_add(1),
-                                )] = Cell::Sand;
+                                )] = cell.clone();
                                 continue;
                             }
                         }
 
-                        self.next_cells[Self::coord_to_index(x, y)] = Cell::Sand;
+                        self.next_cells[Self::coord_to_index(x, y)] = cell.clone();
                     }
                 }
             }
         }
-        self.cells = self.next_cells;
+        self.cells = self.next_cells.clone();
     }
 
     pub fn draw(&self, frame: &mut [u8]) {
@@ -94,11 +90,8 @@ impl World {
             let x = i % Self::WIDTH;
             let y = i / Self::WIDTH;
 
-            let cell = self.cells[Self::coord_to_index(x, y)];
-            pixel.copy_from_slice(match cell {
-                Cell::Air => &[0, 0, 0, 0],
-                Cell::Sand => &[255, 255, 255, 255],
-            });
+            let cell = &self.cells[Self::coord_to_index(x, y)];
+            pixel.copy_from_slice(&cell.color);
         }
     }
 
