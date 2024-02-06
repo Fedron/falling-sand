@@ -49,23 +49,34 @@ impl World {
                 match cell {
                     Cell::Air => {}
                     Cell::Sand => {
-                        if let Some(below) = self.get_cell(x, y + 1) {
+                        if let Some(below) = self.get_cell(x, y.saturating_add(1)) {
                             if below == Cell::Air {
-                                self.next_cells[Self::coord_to_index(x, y + 1)] = Cell::Sand;
+                                self.next_cells[Self::coord_to_index(x, y.saturating_add(1))] =
+                                    Cell::Sand;
                                 continue;
                             }
                         }
 
-                        if let Some(below_right) = self.get_cell(x + 1, y + 1) {
+                        if let Some(below_right) =
+                            self.get_cell(x.saturating_add(1), y.saturating_add(1))
+                        {
                             if below_right == Cell::Air {
-                                self.next_cells[Self::coord_to_index(x + 1, y + 1)] = Cell::Sand;
+                                self.next_cells[Self::coord_to_index(
+                                    x.saturating_add(1),
+                                    y.saturating_add(1),
+                                )] = Cell::Sand;
                                 continue;
                             }
                         }
 
-                        if let Some(below_right) = self.get_cell(x - 1, y + 1) {
+                        if let Some(below_right) =
+                            self.get_cell(x.saturating_sub(1), y.saturating_add(1))
+                        {
                             if below_right == Cell::Air {
-                                self.next_cells[Self::coord_to_index(x - 1, y + 1)] = Cell::Sand;
+                                self.next_cells[Self::coord_to_index(
+                                    x.saturating_sub(1),
+                                    y.saturating_add(1),
+                                )] = Cell::Sand;
                                 continue;
                             }
                         }
