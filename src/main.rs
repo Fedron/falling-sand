@@ -40,6 +40,7 @@ fn main() -> Result<(), Error> {
     };
 
     let mut world = World::new();
+    let mut half_brush_size: usize = 0;
 
     event_loop.run(move |event, _, control_flow| {
         if let Event::RedrawRequested(_) = event {
@@ -57,18 +58,29 @@ fn main() -> Result<(), Error> {
                 return;
             }
 
+            half_brush_size = half_brush_size.saturating_add_signed(input.scroll_diff() as isize);
+
             if input.mouse_held(0) {
                 if let Some((x, y)) = input.mouse() {
-                    let x = (x / 10.0) as usize;
-                    let y = (y / 10.0) as usize;
-                    world.set_cell(
-                        x,
-                        y,
-                        Cell {
-                            id: cell::CellId::Sand,
-                            color: cell::CellId::Sand.varied_color(),
-                        },
-                    );
+                    let center_x = (x / 10.0) as usize;
+                    let center_y = (y / 10.0) as usize;
+
+                    for x in center_x.saturating_sub(half_brush_size)
+                        ..=center_x.saturating_add(half_brush_size)
+                    {
+                        for y in center_y.saturating_sub(half_brush_size)
+                            ..=center_y.saturating_add(half_brush_size)
+                        {
+                            world.set_cell(
+                                x,
+                                y,
+                                Cell {
+                                    id: cell::CellId::Sand,
+                                    color: cell::CellId::Sand.varied_color(),
+                                },
+                            );
+                        }
+                    }
                 }
             }
 
