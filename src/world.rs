@@ -79,6 +79,9 @@ impl World {
 
                         self.next_cells[Self::coord_to_index(x, y)] = cell.clone();
                     }
+                    CellId::Stone => {
+                        self.next_cells[Self::coord_to_index(x, y)] = cell.clone();
+                    }
                 }
             }
         }

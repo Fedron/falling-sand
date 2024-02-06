@@ -40,6 +40,7 @@ fn main() -> Result<(), Error> {
     };
 
     let mut world = World::new();
+    let mut place_stone = false;
     let mut half_brush_size: usize = 0;
 
     event_loop.run(move |event, _, control_flow| {
@@ -58,6 +59,10 @@ fn main() -> Result<(), Error> {
                 return;
             }
 
+            if input.key_pressed(VirtualKeyCode::Space) {
+                place_stone = !place_stone;
+            }
+
             half_brush_size = half_brush_size.saturating_add_signed(input.scroll_diff() as isize);
 
             if input.mouse_held(0) {
@@ -74,9 +79,16 @@ fn main() -> Result<(), Error> {
                             world.set_cell(
                                 x,
                                 y,
-                                Cell {
-                                    id: cell::CellId::Sand,
-                                    color: cell::CellId::Sand.varied_color(),
+                                if place_stone {
+                                    Cell {
+                                        id: cell::CellId::Stone,
+                                        color: cell::CellId::Stone.varied_color(),
+                                    }
+                                } else {
+                                    Cell {
+                                        id: cell::CellId::Sand,
+                                        color: cell::CellId::Sand.varied_color(),
+                                    }
                                 },
                             );
                         }

@@ -4,6 +4,7 @@ use rand::Rng;
 pub enum CellId {
     Air = 0,
     Sand = 1,
+    Stone = 2,
 }
 
 impl CellId {
@@ -13,13 +14,14 @@ impl CellId {
         match self {
             CellId::Air => [0, 0, 0, 0],
             CellId::Sand => [0xff, 0xf4, 0x9f, 0xff],
+            CellId::Stone => [0x80, 0x80, 0x80, 0xff],
         }
     }
 
     pub fn varied_color(&self) -> [u8; 4] {
         match self {
             CellId::Air => [0, 0, 0, 0],
-            CellId::Sand => {
+            _ => {
                 let base_color = self.base_color();
                 let mut rng = rand::thread_rng();
                 let r = rng.gen_range(
