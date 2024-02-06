@@ -1,3 +1,5 @@
+use rand::Rng;
+
 use crate::cell::{Cell, CellId};
 
 pub struct World {
@@ -53,24 +55,30 @@ impl World {
                             }
                         }
 
-                        if let Some(below_right) =
-                            self.get_cell(x.saturating_add(1), y.saturating_add(1))
+                        let dir = if rand::thread_rng().gen_bool(0.5) {
+                            -1
+                        } else {
+                            1
+                        };
+
+                        if let Some(below_a) =
+                            self.get_cell(x.saturating_add_signed(dir), y.saturating_add(1))
                         {
-                            if below_right.id == CellId::Air {
+                            if below_a.id == CellId::Air {
                                 self.next_cells[Self::coord_to_index(
-                                    x.saturating_add(1),
+                                    x.saturating_add_signed(dir),
                                     y.saturating_add(1),
                                 )] = cell.clone();
                                 continue;
                             }
                         }
 
-                        if let Some(below_left) =
-                            self.get_cell(x.saturating_sub(1), y.saturating_add(1))
+                        if let Some(below_b) =
+                            self.get_cell(x.saturating_add_signed(dir), y.saturating_add(1))
                         {
-                            if below_left.id == CellId::Air {
+                            if below_b.id == CellId::Air {
                                 self.next_cells[Self::coord_to_index(
-                                    x.saturating_sub(1),
+                                    x.saturating_add_signed(dir),
                                     y.saturating_add(1),
                                 )] = cell.clone();
                                 continue;
