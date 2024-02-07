@@ -40,6 +40,9 @@ fn main() -> Result<(), Error> {
     };
 
     let mut world = World::new();
+
+    let mut first_mouse = true;
+    let mut last_mouse_pos = (0, 0);
     let mut place_stone = false;
     let mut half_brush_size: usize = 0;
 
@@ -67,27 +70,42 @@ fn main() -> Result<(), Error> {
 
             if input.mouse_held(0) {
                 if let Some((x, y)) = input.mouse() {
-                    let center_x = (x / 10.0) as usize;
-                    let center_y = (y / 10.0) as usize;
+                    if first_mouse {
+                        first_mouse = false;
+                        last_mouse_pos = ((x / 10.0) as usize, (y / 10.0) as usize);
+                    }
 
-                    for x in center_x.saturating_sub(half_brush_size)
-                        ..=center_x.saturating_add(half_brush_size)
-                    {
-                        for y in center_y.saturating_sub(half_brush_size)
-                            ..=center_y.saturating_add(half_brush_size)
+                    let current_mouse_pos = ((x / 10.0) as usize, (y / 10.0) as usize);
+
+                    for (center_x, center_y) in bresenham::Bresenham::new(
+                        (last_mouse_pos.0 as isize, last_mouse_pos.1 as isize),
+                        (current_mouse_pos.0 as isize, current_mouse_pos.1 as isize),
+                    ) {
+                        for x in center_x - half_brush_size as isize
+                            ..=center_x + half_brush_size as isize
                         {
-                            world.set_cell(
-                                x,
-                                y,
-                                if place_stone {
-                                    Cell::new(CellId::Stone)
-                                } else {
-                                    Cell::new(CellId::Sand)
-                                },
-                            );
+                            for y in center_y - half_brush_size as isize
+                                ..=center_y + half_brush_size as isize
+                            {
+                                world.set_cell(
+                                    x as usize,
+                                    y as usize,
+                                    if place_stone {
+                                        Cell::new(CellId::Stone)
+                                    } else {
+                                        Cell::new(CellId::Sand)
+                                    },
+                                );
+                            }
                         }
                     }
+
+                    last_mouse_pos = current_mouse_pos;
                 }
+            }
+
+            if input.mouse_released(0) {
+                first_mouse = true;
             }
 
             if let Some(size) = input.window_resized() {
