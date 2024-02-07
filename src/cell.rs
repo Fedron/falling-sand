@@ -1,5 +1,7 @@
 use rand::Rng;
 
+use crate::world::World;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CellId {
     Air = 0,
@@ -42,15 +44,55 @@ impl CellId {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Cell {
     pub id: CellId,
     pub color: [u8; 4],
 }
 
 impl Cell {
-    pub const AIR: Cell = Cell {
-        id: CellId::Air,
-        color: [0, 0, 0, 0],
-    };
+    pub fn new(id: CellId) -> Self {
+        Self {
+            id,
+            color: id.varied_color(),
+        }
+    }
+
+    pub fn next_position(&self, x: usize, y: usize, world: &World) -> (usize, usize) {
+        match self.id {
+            CellId::Air => (x, y),
+            CellId::Sand => {
+                if let Some(below) = world.get_cell(x, y.saturating_add(1)) {
+                    if below.id == CellId::Air {
+                        return (x, y.saturating_add(1));
+                    }
+                }
+
+                let dir = if rand::thread_rng().gen_bool(0.5) {
+                    -1
+                } else {
+                    1
+                };
+
+                if let Some(below_a) =
+                    world.get_cell(x.saturating_add_signed(dir), y.saturating_add(1))
+                {
+                    if below_a.id == CellId::Air {
+                        return (x.saturating_add_signed(dir), y.saturating_add(1));
+                    }
+                }
+
+                if let Some(below_b) =
+                    world.get_cell(x.saturating_add_signed(dir), y.saturating_add(1))
+                {
+                    if below_b.id == CellId::Air {
+                        return (x.saturating_add_signed(dir), y.saturating_add(1));
+                    }
+                }
+
+                (x, y)
+            }
+            CellId::Stone => (x, y),
+        }
+    }
 }

@@ -1,5 +1,3 @@
-use rand::Rng;
-
 use crate::cell::{Cell, CellId};
 
 pub struct World {
@@ -13,8 +11,8 @@ impl World {
 
     pub fn new() -> Self {
         Self {
-            cells: [Cell::AIR; Self::WIDTH * Self::HEIGHT],
-            next_cells: [Cell::AIR; Self::WIDTH * Self::HEIGHT],
+            cells: [Cell::new(CellId::Air); Self::WIDTH * Self::HEIGHT],
+            next_cells: [Cell::new(CellId::Air); Self::WIDTH * Self::HEIGHT],
         }
     }
 
@@ -35,64 +33,21 @@ impl World {
     }
 
     pub fn update(&mut self) {
-        self.next_cells = [Cell::AIR; Self::WIDTH * Self::HEIGHT];
+        self.next_cells = [Cell::new(CellId::Air); Self::WIDTH * Self::HEIGHT];
+
         for x in 0..Self::WIDTH {
             for y in 0..Self::HEIGHT {
-                let cell = self.get_cell(x, y);
-                if cell.is_none() {
-                    continue;
-                }
-                let cell = cell.unwrap();
-
-                match cell.id {
-                    CellId::Air => {}
-                    CellId::Sand => {
-                        if let Some(below) = self.get_cell(x, y.saturating_add(1)) {
-                            if below.id == CellId::Air {
-                                self.next_cells[Self::coord_to_index(x, y.saturating_add(1))] =
-                                    cell.clone();
-                                continue;
-                            }
-                        }
-
-                        let dir = if rand::thread_rng().gen_bool(0.5) {
-                            -1
-                        } else {
-                            1
-                        };
-
-                        if let Some(below_a) =
-                            self.get_cell(x.saturating_add_signed(dir), y.saturating_add(1))
-                        {
-                            if below_a.id == CellId::Air {
-                                self.next_cells[Self::coord_to_index(
-                                    x.saturating_add_signed(dir),
-                                    y.saturating_add(1),
-                                )] = cell.clone();
-                                continue;
-                            }
-                        }
-
-                        if let Some(below_b) =
-                            self.get_cell(x.saturating_add_signed(dir), y.saturating_add(1))
-                        {
-                            if below_b.id == CellId::Air {
-                                self.next_cells[Self::coord_to_index(
-                                    x.saturating_add_signed(dir),
-                                    y.saturating_add(1),
-                                )] = cell.clone();
-                                continue;
-                            }
-                        }
-
-                        self.next_cells[Self::coord_to_index(x, y)] = cell.clone();
+                if let Some(cell) = self.get_cell(x, y) {
+                    if cell.id == CellId::Air {
+                        continue;
                     }
-                    CellId::Stone => {
-                        self.next_cells[Self::coord_to_index(x, y)] = cell.clone();
-                    }
+
+                    let (new_x, new_y) = cell.next_position(x, y, &self);
+                    self.next_cells[Self::coord_to_index(new_x, new_y)] = cell;
                 }
             }
         }
+
         self.cells = self.next_cells.clone();
     }
 
@@ -107,6 +62,6 @@ impl World {
     }
 
     fn coord_to_index(x: usize, y: usize) -> usize {
-        y * World::WIDTH + x
+        (y * World::WIDTH + x).clamp(0, World::WIDTH * World::HEIGHT - 1)
     }
 }

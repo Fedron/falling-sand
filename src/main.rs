@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 
 use crate::world::World;
-use cell::Cell;
+use cell::{Cell, CellId};
 use error_iter::ErrorIter as _;
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
@@ -80,15 +80,9 @@ fn main() -> Result<(), Error> {
                                 x,
                                 y,
                                 if place_stone {
-                                    Cell {
-                                        id: cell::CellId::Stone,
-                                        color: cell::CellId::Stone.varied_color(),
-                                    }
+                                    Cell::new(CellId::Stone)
                                 } else {
-                                    Cell {
-                                        id: cell::CellId::Sand,
-                                        color: cell::CellId::Sand.varied_color(),
-                                    }
+                                    Cell::new(CellId::Sand)
                                 },
                             );
                         }
