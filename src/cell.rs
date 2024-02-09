@@ -105,7 +105,7 @@ impl Cell {
                 let mut found_move = false;
                 let mut new_y = y;
                 for _ in 0..self.velocity as usize {
-                    if let Some(below) = world.get_cell(x.saturating_add_signed(dir), new_y + 1) {
+                    if let Some(below) = world.get_cell(x.saturating_add_signed(-dir), new_y + 1) {
                         if below.id != CellId::Air {
                             break;
                         }
@@ -115,7 +115,7 @@ impl Cell {
                 }
 
                 if found_move {
-                    return (x.saturating_add_signed(1), new_y);
+                    return (x.saturating_add_signed(-dir), new_y);
                 }
 
                 (x, y)
