@@ -37,12 +37,13 @@ impl World {
 
         for x in 0..Self::WIDTH {
             for y in 0..Self::HEIGHT {
-                if let Some(cell) = self.get_cell(x, y) {
+                if let Some(mut cell) = self.get_cell(x, y) {
                     if cell.id == CellId::Air {
                         continue;
                     }
 
                     let (new_x, new_y) = cell.next_position(x, y, &self);
+                    cell.velocity += 0.1;
                     self.next_cells[Self::coord_to_index(new_x, new_y)] = cell;
                 }
             }

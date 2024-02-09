@@ -48,6 +48,7 @@ impl CellId {
 pub struct Cell {
     pub id: CellId,
     pub color: [u8; 4],
+    pub velocity: f32,
 }
 
 impl Cell {
@@ -55,6 +56,7 @@ impl Cell {
         Self {
             id,
             color: id.varied_color(),
+            velocity: 0.0,
         }
     }
 
@@ -62,32 +64,58 @@ impl Cell {
         match self.id {
             CellId::Air => (x, y),
             CellId::Sand => {
-                if let Some(below) = world.get_cell(x, y.saturating_add(1)) {
-                    if below.id == CellId::Air {
-                        return (x, y.saturating_add(1));
+                let mut found_move = false;
+                let mut new_y = y;
+                for _ in 0..self.velocity as usize {
+                    if let Some(below) = world.get_cell(x, new_y + 1) {
+                        if below.id != CellId::Air {
+                            break;
+                        }
+                        found_move = true;
+                        new_y += 1;
                     }
+                }
+
+                if found_move {
+                    return (x, new_y);
                 }
 
                 let dir = if rand::thread_rng().gen_bool(0.5) {
-                    -1
-                } else {
                     1
+                } else {
+                    -1
                 };
 
-                if let Some(below_a) =
-                    world.get_cell(x.saturating_add_signed(dir), y.saturating_add(1))
-                {
-                    if below_a.id == CellId::Air {
-                        return (x.saturating_add_signed(dir), y.saturating_add(1));
+                let mut found_move = false;
+                let mut new_y = y;
+                for _ in 0..self.velocity as usize {
+                    if let Some(below) = world.get_cell(x.saturating_add_signed(dir), new_y + 1) {
+                        if below.id != CellId::Air {
+                            break;
+                        }
+                        found_move = true;
+                        new_y += 1;
                     }
                 }
 
-                if let Some(below_b) =
-                    world.get_cell(x.saturating_add_signed(dir), y.saturating_add(1))
-                {
-                    if below_b.id == CellId::Air {
-                        return (x.saturating_add_signed(dir), y.saturating_add(1));
+                if found_move {
+                    return (x.saturating_add_signed(dir), new_y);
+                }
+
+                let mut found_move = false;
+                let mut new_y = y;
+                for _ in 0..self.velocity as usize {
+                    if let Some(below) = world.get_cell(x.saturating_add_signed(dir), new_y + 1) {
+                        if below.id != CellId::Air {
+                            break;
+                        }
+                        found_move = true;
+                        new_y += 1;
                     }
+                }
+
+                if found_move {
+                    return (x.saturating_add_signed(1), new_y);
                 }
 
                 (x, y)
