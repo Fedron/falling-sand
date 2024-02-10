@@ -49,6 +49,7 @@ pub struct Cell {
     pub id: CellId,
     pub color: [u8; 4],
     pub velocity: f32,
+    pub moved: bool,
 }
 
 impl Cell {
@@ -57,6 +58,7 @@ impl Cell {
             id,
             color: id.varied_color(),
             velocity: 0.0,
+            moved: false,
         }
     }
 
