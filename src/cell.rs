@@ -7,6 +7,19 @@ pub enum CellId {
     Air = 0,
     Sand = 1,
     Stone = 2,
+    Water = 3,
+}
+
+impl From<u8> for CellId {
+    fn from(item: u8) -> Self {
+        match item {
+            0 => CellId::Air,
+            1 => CellId::Sand,
+            2 => CellId::Stone,
+            3 => CellId::Water,
+            _ => panic!("Invalid cell id: {}", item),
+        }
+    }
 }
 
 impl CellId {
@@ -17,6 +30,7 @@ impl CellId {
             CellId::Air => [0, 0, 0, 0],
             CellId::Sand => [0xff, 0xf4, 0x9f, 0xff],
             CellId::Stone => [0x80, 0x80, 0x80, 0xff],
+            CellId::Water => [0x57, 0xa4, 0xff, 0xff],
         }
     }
 
@@ -123,6 +137,95 @@ impl Cell {
                 (x, y)
             }
             CellId::Stone => (x, y),
+            CellId::Water => {
+                let mut found_move = false;
+                let mut new_y = y;
+                for _ in 0..self.velocity as usize {
+                    if let Some(below) = world.get_cell(x, new_y + 1) {
+                        if below.id != CellId::Air {
+                            break;
+                        }
+                        found_move = true;
+                        new_y += 1;
+                    }
+                }
+
+                if found_move {
+                    return (x, new_y);
+                }
+
+                let dir = if rand::thread_rng().gen_bool(0.5) {
+                    1
+                } else {
+                    -1
+                };
+
+                let mut found_move = false;
+                let mut new_x = x;
+                for _ in 0..self.velocity as usize {
+                    if let Some(below) = world.get_cell(new_x.saturating_add_signed(dir), y) {
+                        if below.id != CellId::Air {
+                            break;
+                        }
+                        found_move = true;
+                        new_x = new_x.saturating_add_signed(dir);
+                    }
+                }
+
+                if found_move {
+                    return (new_x, y);
+                }
+
+                let mut found_move = false;
+                let mut new_x = x;
+                for _ in 0..self.velocity as usize {
+                    if let Some(below) = world.get_cell(new_x.saturating_add_signed(-dir), y) {
+                        if below.id != CellId::Air {
+                            break;
+                        }
+                        found_move = true;
+                        new_x = new_x.saturating_add_signed(-dir);
+                    }
+                }
+
+                if found_move {
+                    return (new_x, y);
+                }
+
+                let mut found_move = false;
+                let mut new_y = y;
+                for _ in 0..self.velocity as usize {
+                    if let Some(below) = world.get_cell(x.saturating_add_signed(dir), new_y + 1) {
+                        if below.id != CellId::Air {
+                            break;
+                        }
+                        found_move = true;
+                        new_y += 1;
+                    }
+                }
+
+                if found_move {
+                    return (x.saturating_add_signed(dir), new_y);
+                }
+
+                let mut found_move = false;
+                let mut new_y = y;
+                for _ in 0..self.velocity as usize {
+                    if let Some(below) = world.get_cell(x.saturating_add_signed(-dir), new_y + 1) {
+                        if below.id != CellId::Air {
+                            break;
+                        }
+                        found_move = true;
+                        new_y += 1;
+                    }
+                }
+
+                if found_move {
+                    return (x.saturating_add_signed(-dir), new_y);
+                }
+
+                (x, y)
+            }
         }
     }
 }
