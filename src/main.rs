@@ -17,6 +17,12 @@ use winit_input_helper::WinitInputHelper;
 mod cell;
 mod world;
 
+struct MouseInfo {
+    first_mouse: bool,
+    last_mouse_pos: (usize, usize),
+    current_mouse_pos: (usize, usize),
+}
+
 fn main() -> Result<(), Error> {
     env_logger::init();
     let event_loop = EventLoop::new();
@@ -41,8 +47,11 @@ fn main() -> Result<(), Error> {
 
     let mut world = World::new();
 
-    let mut first_mouse = true;
-    let mut last_mouse_pos = (0, 0);
+    let mut mouse_info = MouseInfo {
+        first_mouse: true,
+        last_mouse_pos: (0, 0),
+        current_mouse_pos: (0, 0),
+    };
     let mut half_brush_size: usize = 0;
 
     let mut placeable_cells = [
@@ -79,36 +88,23 @@ fn main() -> Result<(), Error> {
 
             half_brush_size = half_brush_size.saturating_add_signed(input.scroll_diff() as isize);
 
-            if input.mouse_held(0) {
+            if input.mouse_held(0) || input.mouse_held(1) {
                 if let Some((x, y)) = input.mouse() {
-                    if first_mouse {
-                        first_mouse = false;
-                        last_mouse_pos = ((x / 10.0) as usize, (y / 10.0) as usize);
-                    }
+                    update_mouse_info(&mut mouse_info, x, y);
 
-                    let current_mouse_pos = ((x / 10.0) as usize, (y / 10.0) as usize);
+                    let cell_to_place = if input.mouse_held(0) {
+                        cell_to_place
+                    } else {
+                        CellId::Air
+                    };
+                    place_cells(&mouse_info, &mut world, cell_to_place, half_brush_size);
 
-                    for (center_x, center_y) in bresenham::Bresenham::new(
-                        (last_mouse_pos.0 as isize, last_mouse_pos.1 as isize),
-                        (current_mouse_pos.0 as isize, current_mouse_pos.1 as isize),
-                    ) {
-                        for x in center_x - half_brush_size as isize
-                            ..=center_x + half_brush_size as isize
-                        {
-                            for y in center_y - half_brush_size as isize
-                                ..=center_y + half_brush_size as isize
-                            {
-                                world.set_cell(x as usize, y as usize, Cell::new(cell_to_place));
-                            }
-                        }
-                    }
-
-                    last_mouse_pos = current_mouse_pos;
+                    mouse_info.last_mouse_pos = mouse_info.current_mouse_pos;
                 }
             }
 
-            if input.mouse_released(0) {
-                first_mouse = true;
+            if input.mouse_released(0) || input.mouse_released(1) {
+                mouse_info.first_mouse = true;
             }
 
             if let Some(size) = input.window_resized() {
@@ -124,6 +120,40 @@ fn main() -> Result<(), Error> {
             window.request_redraw();
         }
     });
+}
+
+fn update_mouse_info(mouse_info: &mut MouseInfo, x: f32, y: f32) {
+    if mouse_info.first_mouse {
+        mouse_info.first_mouse = false;
+        mouse_info.last_mouse_pos = ((x / 10.0) as usize, (y / 10.0) as usize);
+    }
+
+    let current_mouse_pos = ((x / 10.0) as usize, (y / 10.0) as usize);
+    mouse_info.current_mouse_pos = current_mouse_pos;
+}
+
+fn place_cells(
+    mouse_info: &MouseInfo,
+    world: &mut World,
+    cell_to_place: CellId,
+    half_brush_size: usize,
+) {
+    for (center_x, center_y) in bresenham::Bresenham::new(
+        (
+            mouse_info.last_mouse_pos.0 as isize,
+            mouse_info.last_mouse_pos.1 as isize,
+        ),
+        (
+            mouse_info.current_mouse_pos.0 as isize,
+            mouse_info.current_mouse_pos.1 as isize,
+        ),
+    ) {
+        for x in center_x - half_brush_size as isize..=center_x + half_brush_size as isize {
+            for y in center_y - half_brush_size as isize..=center_y + half_brush_size as isize {
+                world.set_cell(x as usize, y as usize, Cell::new(cell_to_place));
+            }
+        }
+    }
 }
 
 fn log_error<E: std::error::Error + 'static>(method_name: &str, err: E) {
