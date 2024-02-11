@@ -1,3 +1,4 @@
+use bresenham::Bresenham;
 use rand::Rng;
 
 use crate::world::World;
@@ -58,12 +59,221 @@ impl CellId {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+pub trait CellBehaviour {
+    fn next_position(&mut self, x: usize, y: usize, world: &World) -> (usize, usize);
+    fn clone_box(&self) -> Box<dyn CellBehaviour>;
+
+    fn check_cells_along_line(
+        &self,
+        start_x: isize,
+        start_y: isize,
+        world: &World,
+        end_x: isize,
+        end_y: isize,
+    ) -> (usize, usize) {
+        let mut new_x = start_x;
+        let mut new_y = start_y;
+
+        for (x, y) in Bresenham::new((start_x, start_y), (end_x, end_y)) {
+            if x == start_x && y == start_y {
+                continue;
+            }
+
+            if let Some(cell) = world.get_cell(x as usize, y as usize) {
+                if cell.id != CellId::Air {
+                    break;
+                }
+
+                new_x = x;
+                new_y = y;
+            } else {
+                break;
+            }
+        }
+
+        (new_x as usize, new_y as usize)
+    }
+}
+
+impl Clone for Box<dyn CellBehaviour> {
+    fn clone(&self) -> Box<dyn CellBehaviour> {
+        self.clone_box()
+    }
+}
+
+pub struct AirBehaviour;
+pub struct SolidBehaviour;
+
+#[derive(Clone, Copy)]
+pub struct SandBehaviour {
+    velocity: f32,
+}
+
+#[derive(Clone, Copy)]
+pub struct WaterBehaviour {
+    dispersion_rate: isize,
+}
+
+impl CellBehaviour for AirBehaviour {
+    fn next_position(&mut self, x: usize, y: usize, _world: &World) -> (usize, usize) {
+        (x, y)
+    }
+
+    fn clone_box(&self) -> Box<dyn CellBehaviour> {
+        Box::new(AirBehaviour)
+    }
+}
+
+impl CellBehaviour for SolidBehaviour {
+    fn next_position(&mut self, x: usize, y: usize, _world: &World) -> (usize, usize) {
+        (x, y)
+    }
+
+    fn clone_box(&self) -> Box<dyn CellBehaviour> {
+        Box::new(SolidBehaviour)
+    }
+}
+
+impl CellBehaviour for SandBehaviour {
+    fn next_position(&mut self, x: usize, y: usize, world: &World) -> (usize, usize) {
+        self.velocity += 0.1;
+
+        let (new_x, new_y) = self.check_cells_along_line(
+            x as isize,
+            y as isize,
+            world,
+            x as isize,
+            (y as f32 + self.velocity) as isize,
+        );
+
+        if (new_x, new_y) != (x, y) {
+            return (new_x, new_y);
+        }
+
+        let dir = if rand::thread_rng().gen() { 1 } else { -1 };
+
+        for i in 0..=self.velocity as usize {
+            let dx = x as isize + (i as isize * dir);
+            let (new_x, new_y) = self.check_cells_along_line(
+                x as isize,
+                y as isize,
+                world,
+                dx,
+                (y as f32 + self.velocity) as isize,
+            );
+
+            if (new_x, new_y) != (x, y) {
+                return (new_x, new_y);
+            }
+        }
+
+        for i in 0..=self.velocity as usize {
+            let dx = x as isize + (i as isize * -dir);
+            let (new_x, new_y) = self.check_cells_along_line(
+                x as isize,
+                y as isize,
+                world,
+                dx,
+                (y as f32 + self.velocity) as isize,
+            );
+
+            if (new_x, new_y) != (x, y) {
+                return (new_x, new_y);
+            }
+        }
+
+        (x, y)
+    }
+
+    fn clone_box(&self) -> Box<dyn CellBehaviour> {
+        Box::new(*self)
+    }
+}
+
+impl CellBehaviour for WaterBehaviour {
+    fn next_position(&mut self, x: usize, y: usize, world: &World) -> (usize, usize) {
+        let (new_x, new_y) = self.check_cells_along_line(
+            x as isize,
+            y as isize,
+            world,
+            x as isize,
+            y as isize + self.dispersion_rate,
+        );
+
+        if (new_x, new_y) != (x, y) {
+            return (new_x, new_y);
+        }
+
+        let dir = if rand::thread_rng().gen() { 1 } else { -1 };
+
+        let (new_x, new_y) = self.check_cells_along_line(
+            x as isize,
+            y as isize,
+            world,
+            x as isize + (self.dispersion_rate * dir),
+            y as isize,
+        );
+
+        if (new_x, new_y) != (x, y) {
+            return (new_x, new_y);
+        }
+
+        let (new_x, new_y) = self.check_cells_along_line(
+            x as isize,
+            y as isize,
+            world,
+            x as isize + (self.dispersion_rate * -dir),
+            y as isize,
+        );
+
+        if (new_x, new_y) != (x, y) {
+            return (new_x, new_y);
+        }
+
+        for i in 0..=self.dispersion_rate as usize {
+            let dx = x as isize + (i as isize * dir);
+            let (new_x, new_y) = self.check_cells_along_line(
+                x as isize,
+                y as isize,
+                world,
+                dx,
+                (y as isize + self.dispersion_rate) as isize,
+            );
+
+            if (new_x, new_y) != (x, y) {
+                return (new_x, new_y);
+            }
+        }
+
+        for i in 0..=self.dispersion_rate as usize {
+            let dx = x as isize + (i as isize * -dir);
+            let (new_x, new_y) = self.check_cells_along_line(
+                x as isize,
+                y as isize,
+                world,
+                dx,
+                (y as isize + self.dispersion_rate) as isize,
+            );
+
+            if (new_x, new_y) != (x, y) {
+                return (new_x, new_y);
+            }
+        }
+
+        (x, y)
+    }
+
+    fn clone_box(&self) -> Box<dyn CellBehaviour> {
+        Box::new(*self)
+    }
+}
+
+#[derive(Clone)]
 pub struct Cell {
     pub id: CellId,
     pub color: [u8; 4],
-    pub velocity: f32,
     pub moved: bool,
+    pub behaviour: Box<dyn CellBehaviour>,
 }
 
 impl Cell {
@@ -71,161 +281,23 @@ impl Cell {
         Self {
             id,
             color: id.varied_color(),
-            velocity: 0.0,
             moved: false,
+            behaviour: match id {
+                CellId::Air => Box::new(AirBehaviour),
+                CellId::Sand => Box::new(SandBehaviour { velocity: 1.0 }),
+                CellId::Stone => Box::new(SolidBehaviour),
+                CellId::Water => Box::new(WaterBehaviour { dispersion_rate: 2 }),
+            },
         }
     }
 
-    pub fn next_position(&self, x: usize, y: usize, world: &World) -> (usize, usize) {
-        match self.id {
-            CellId::Air => (x, y),
-            CellId::Sand => {
-                let mut found_move = false;
-                let mut new_y = y;
-                for _ in 0..self.velocity as usize {
-                    if let Some(below) = world.get_cell(x, new_y + 1) {
-                        if below.id != CellId::Air {
-                            break;
-                        }
-                        found_move = true;
-                        new_y += 1;
-                    }
-                }
+    pub fn next_position(&mut self, x: usize, y: usize, world: &World) -> (usize, usize) {
+        let (new_x, new_y) = self.behaviour.next_position(x, y, world);
 
-                if found_move {
-                    return (x, new_y);
-                }
-
-                let dir = if rand::thread_rng().gen_bool(0.5) {
-                    1
-                } else {
-                    -1
-                };
-
-                let mut found_move = false;
-                let mut new_y = y;
-                for _ in 0..self.velocity as usize {
-                    if let Some(below) = world.get_cell(x.saturating_add_signed(dir), new_y + 1) {
-                        if below.id != CellId::Air {
-                            break;
-                        }
-                        found_move = true;
-                        new_y += 1;
-                    }
-                }
-
-                if found_move {
-                    return (x.saturating_add_signed(dir), new_y);
-                }
-
-                let mut found_move = false;
-                let mut new_y = y;
-                for _ in 0..self.velocity as usize {
-                    if let Some(below) = world.get_cell(x.saturating_add_signed(-dir), new_y + 1) {
-                        if below.id != CellId::Air {
-                            break;
-                        }
-                        found_move = true;
-                        new_y += 1;
-                    }
-                }
-
-                if found_move {
-                    return (x.saturating_add_signed(-dir), new_y);
-                }
-
-                (x, y)
-            }
-            CellId::Stone => (x, y),
-            CellId::Water => {
-                let mut found_move = false;
-                let mut new_y = y;
-                for _ in 0..self.velocity as usize {
-                    if let Some(below) = world.get_cell(x, new_y + 1) {
-                        if below.id != CellId::Air {
-                            break;
-                        }
-                        found_move = true;
-                        new_y += 1;
-                    }
-                }
-
-                if found_move {
-                    return (x, new_y);
-                }
-
-                let dir = if rand::thread_rng().gen_bool(0.5) {
-                    1
-                } else {
-                    -1
-                };
-
-                let mut found_move = false;
-                let mut new_x = x;
-                for _ in 0..self.velocity as usize {
-                    if let Some(below) = world.get_cell(new_x.saturating_add_signed(dir), y) {
-                        if below.id != CellId::Air {
-                            break;
-                        }
-                        found_move = true;
-                        new_x = new_x.saturating_add_signed(dir);
-                    }
-                }
-
-                if found_move {
-                    return (new_x, y);
-                }
-
-                let mut found_move = false;
-                let mut new_x = x;
-                for _ in 0..self.velocity as usize {
-                    if let Some(below) = world.get_cell(new_x.saturating_add_signed(-dir), y) {
-                        if below.id != CellId::Air {
-                            break;
-                        }
-                        found_move = true;
-                        new_x = new_x.saturating_add_signed(-dir);
-                    }
-                }
-
-                if found_move {
-                    return (new_x, y);
-                }
-
-                let mut found_move = false;
-                let mut new_y = y;
-                for _ in 0..self.velocity as usize {
-                    if let Some(below) = world.get_cell(x.saturating_add_signed(dir), new_y + 1) {
-                        if below.id != CellId::Air {
-                            break;
-                        }
-                        found_move = true;
-                        new_y += 1;
-                    }
-                }
-
-                if found_move {
-                    return (x.saturating_add_signed(dir), new_y);
-                }
-
-                let mut found_move = false;
-                let mut new_y = y;
-                for _ in 0..self.velocity as usize {
-                    if let Some(below) = world.get_cell(x.saturating_add_signed(-dir), new_y + 1) {
-                        if below.id != CellId::Air {
-                            break;
-                        }
-                        found_move = true;
-                        new_y += 1;
-                    }
-                }
-
-                if found_move {
-                    return (x.saturating_add_signed(-dir), new_y);
-                }
-
-                (x, y)
-            }
+        if (new_x, new_y) != (x, y) {
+            self.moved = true;
         }
+
+        (new_x, new_y)
     }
 }

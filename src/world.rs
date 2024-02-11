@@ -1,7 +1,7 @@
 use crate::cell::{Cell, CellId};
 
 pub struct World {
-    cells: [Cell; World::WIDTH * World::HEIGHT],
+    cells: Vec<Cell>,
 }
 
 impl World {
@@ -9,17 +9,20 @@ impl World {
     const HEIGHT: usize = 48;
 
     pub fn new() -> Self {
-        Self {
-            cells: [Cell::new(CellId::Air); Self::WIDTH * Self::HEIGHT],
+        let mut cells = Vec::with_capacity(Self::WIDTH * Self::HEIGHT);
+        for _ in 0..Self::WIDTH * Self::HEIGHT {
+            cells.push(Cell::new(CellId::Air));
         }
+
+        Self { cells }
     }
 
-    pub fn get_cell(&self, x: usize, y: usize) -> Option<Cell> {
-        if x >= Self::WIDTH || y >= Self::HEIGHT {
-            return None;
-        }
+    pub fn get_cell(&self, x: usize, y: usize) -> Option<&Cell> {
+        self.cells.get(Self::coord_to_index(x, y))
+    }
 
-        Some(self.cells[Self::coord_to_index(x, y)].clone())
+    pub fn get_cell_mut(&mut self, x: usize, y: usize) -> Option<&mut Cell> {
+        self.cells.get_mut(Self::coord_to_index(x, y))
     }
 
     pub fn set_cell(&mut self, x: usize, y: usize, cell: Cell) {
@@ -33,19 +36,20 @@ impl World {
     pub fn update(&mut self) {
         for x in 0..Self::WIDTH {
             for y in 0..Self::HEIGHT {
-                if let Some(mut cell) = self.get_cell(x, y) {
+                if let Some(mut cell) = self.get_cell(x, y).cloned() {
                     if cell.moved {
                         continue;
                     }
 
-                    let (new_x, new_y) = cell.next_position(x, y, &self);
-                    cell.velocity += 0.1;
-                    cell.moved = true;
+                    let (new_x, new_y) = cell.next_position(x, y, self);
 
-                    if let Some(next_cell) = self.get_cell(new_x, new_y) {
-                        self.set_cell(x, y, next_cell);
+                    if (new_x, new_y) != (x, y) {
+                        if let Some(next_cell) =
+                            self.cells.get(Self::coord_to_index(new_x, new_y)).cloned()
+                        {
+                            self.set_cell(x, y, next_cell);
+                        }
                     }
-
                     self.set_cell(new_x, new_y, cell);
                 }
             }
@@ -64,6 +68,6 @@ impl World {
     }
 
     fn coord_to_index(x: usize, y: usize) -> usize {
-        (y * World::WIDTH + x).clamp(0, World::WIDTH * World::HEIGHT - 1)
+        (y * World::WIDTH).saturating_add(x)
     }
 }
