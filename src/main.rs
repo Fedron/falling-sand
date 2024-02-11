@@ -43,8 +43,18 @@ fn main() -> Result<(), Error> {
 
     let mut first_mouse = true;
     let mut last_mouse_pos = (0, 0);
-    let mut cell_to_place = CellId::Sand;
     let mut half_brush_size: usize = 0;
+
+    let mut placeable_cells = [
+        CellId::Sand,
+        CellId::Water,
+        CellId::Stone,
+        CellId::Dirt,
+        CellId::Coal,
+    ]
+    .iter()
+    .cycle();
+    let mut cell_to_place = placeable_cells.next().unwrap().clone();
 
     event_loop.run(move |event, _, control_flow| {
         if let Event::RedrawRequested(_) = event {
@@ -63,7 +73,8 @@ fn main() -> Result<(), Error> {
             }
 
             if input.key_pressed(VirtualKeyCode::Space) {
-                cell_to_place = ((cell_to_place as u8 + 1) % 3 + 1).into();
+                cell_to_place = placeable_cells.next().unwrap().clone();
+                println!("Placing {:?}", cell_to_place);
             }
 
             half_brush_size = half_brush_size.saturating_add_signed(input.scroll_diff() as isize);
@@ -87,11 +98,7 @@ fn main() -> Result<(), Error> {
                             for y in center_y - half_brush_size as isize
                                 ..=center_y + half_brush_size as isize
                             {
-                                world.set_cell(
-                                    x as usize,
-                                    y as usize,
-                                    Cell::new(cell_to_place)
-                                );
+                                world.set_cell(x as usize, y as usize, Cell::new(cell_to_place));
                             }
                         }
                     }

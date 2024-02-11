@@ -37,7 +37,7 @@ impl World {
         for x in 0..Self::WIDTH {
             for y in 0..Self::HEIGHT {
                 if let Some(mut cell) = self.get_cell(x, y).cloned() {
-                    if cell.moved {
+                    if cell.moved_this_frame {
                         continue;
                     }
 
@@ -62,7 +62,7 @@ impl World {
             let y = i / Self::WIDTH;
 
             let cell = &mut self.cells[Self::coord_to_index(x, y)];
-            cell.moved = false;
+            cell.moved_this_frame = false;
             pixel.copy_from_slice(&cell.color);
         }
     }
