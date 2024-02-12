@@ -381,7 +381,9 @@ impl Cell {
             self.is_stationary = false;
             self.same_pos_count = 0;
         } else {
-            self.same_pos_count += 1;
+            if !self.is_stationary {
+                self.same_pos_count += 1;
+            }
         }
 
         if self.same_pos_count > 1 {
