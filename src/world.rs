@@ -1,4 +1,4 @@
-use crate::cell::{Cell, CellId};
+use crate::cell::{id::CellId, Cell};
 
 pub struct World {
     cells: Vec<Cell>,

@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 
 use crate::world::World;
-use cell::{Cell, CellId};
+use cell::{id::CellId, Cell};
 use error_iter::ErrorIter as _;
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
