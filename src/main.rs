@@ -1,164 +1,175 @@
-#![deny(clippy::all)]
-#![forbid(unsafe_code)]
-
-use crate::world::World;
-use cell::{id::CellId, Cell};
-use error_iter::ErrorIter as _;
-use log::error;
-use pixels::{Error, Pixels, SurfaceTexture};
+use std::borrow::Cow;
 use winit::{
-    dpi::LogicalSize,
-    event::{Event, VirtualKeyCode},
-    event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    event::{Event, WindowEvent},
+    event_loop::EventLoop,
+    window::Window,
 };
-use winit_input_helper::WinitInputHelper;
 
-mod cell;
-mod world;
+async fn run(event_loop: EventLoop<()>, window: Window) {
+    let mut size = window.inner_size();
+    size.width = size.width.max(1);
+    size.height = size.height.max(1);
 
-struct MouseInfo {
-    first_mouse: bool,
-    last_mouse_pos: (usize, usize),
-    current_mouse_pos: (usize, usize),
-}
+    let instance = wgpu::Instance::default();
 
-fn main() -> Result<(), Error> {
-    env_logger::init();
-    let event_loop = EventLoop::new();
-    let mut input = WinitInputHelper::new();
+    let surface = instance.create_surface(&window).unwrap();
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            force_fallback_adapter: false,
+            // Request an adapter which can render to our surface
+            compatible_surface: Some(&surface),
+        })
+        .await
+        .expect("Failed to find an appropriate adapter");
 
-    let window = {
-        let size = LogicalSize::new(640, 480);
-        WindowBuilder::new()
-            .with_title("Falling Sand")
-            .with_inner_size(size)
-            .with_min_inner_size(size)
-            .build(&event_loop)
-            .unwrap()
-    };
+    // Create the logical device and command queue
+    let (device, queue) = adapter
+        .request_device(
+            &wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::empty(),
+                // Make sure we use the texture resolution limits from the adapter, so we can support images the size of the swapchain.
+                required_limits: wgpu::Limits::downlevel_webgl2_defaults()
+                    .using_resolution(adapter.limits()),
+            },
+            None,
+        )
+        .await
+        .expect("Failed to create device");
 
-    let mut pixels = {
-        let window_size = window.inner_size();
-        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-
-        Pixels::new(64, 48, surface_texture)?
-    };
-
-    let mut world = World::new();
-
-    let mut mouse_info = MouseInfo {
-        first_mouse: true,
-        last_mouse_pos: (0, 0),
-        current_mouse_pos: (0, 0),
-    };
-    let mut half_brush_size: usize = 0;
-
-    let mut placeable_cells = [
-        CellId::Sand,
-        CellId::Water,
-        CellId::Stone,
-        CellId::Dirt,
-        CellId::Coal,
-    ]
-    .iter()
-    .cycle();
-    let mut cell_to_place = placeable_cells.next().unwrap().clone();
-
-    event_loop.run(move |event, _, control_flow| {
-        if let Event::RedrawRequested(_) = event {
-            world.draw(pixels.frame_mut());
-            if let Err(err) = pixels.render() {
-                log_error("pixels.render", err);
-                *control_flow = ControlFlow::Exit;
-                return;
-            }
-        }
-
-        if input.update(&event) {
-            if input.key_pressed(VirtualKeyCode::Escape) || input.close_requested() {
-                *control_flow = ControlFlow::Exit;
-                return;
-            }
-
-            if input.key_pressed(VirtualKeyCode::Space) {
-                cell_to_place = placeable_cells.next().unwrap().clone();
-                println!("Placing {:?}", cell_to_place);
-            }
-
-            half_brush_size = half_brush_size.saturating_add_signed(input.scroll_diff() as isize);
-
-            if input.mouse_held(0) || input.mouse_held(1) {
-                if let Some((x, y)) = input.mouse() {
-                    update_mouse_info(&mut mouse_info, x, y);
-
-                    let cell_to_place = if input.mouse_held(0) {
-                        cell_to_place
-                    } else {
-                        CellId::Air
-                    };
-                    place_cells(&mouse_info, &mut world, cell_to_place, half_brush_size);
-
-                    mouse_info.last_mouse_pos = mouse_info.current_mouse_pos;
-                }
-            }
-
-            if input.mouse_released(0) || input.mouse_released(1) {
-                mouse_info.first_mouse = true;
-            }
-
-            if let Some(size) = input.window_resized() {
-                if let Err(err) = pixels.resize_surface(size.width, size.height) {
-                    log_error("pixels.resize_surface", err);
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-            }
-
-            // Update internal state and request a redraw
-            world.update();
-            window.request_redraw();
-        }
+    // Load the shaders from disk
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
     });
-}
 
-fn update_mouse_info(mouse_info: &mut MouseInfo, x: f32, y: f32) {
-    if mouse_info.first_mouse {
-        mouse_info.first_mouse = false;
-        mouse_info.last_mouse_pos = ((x / 10.0) as usize, (y / 10.0) as usize);
-    }
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        push_constant_ranges: &[],
+    });
 
-    let current_mouse_pos = ((x / 10.0) as usize, (y / 10.0) as usize);
-    mouse_info.current_mouse_pos = current_mouse_pos;
-}
+    let swapchain_capabilities = surface.get_capabilities(&adapter);
+    let swapchain_format = swapchain_capabilities.formats[0];
 
-fn place_cells(
-    mouse_info: &MouseInfo,
-    world: &mut World,
-    cell_to_place: CellId,
-    half_brush_size: usize,
-) {
-    for (center_x, center_y) in bresenham::Bresenham::new(
-        (
-            mouse_info.last_mouse_pos.0 as isize,
-            mouse_info.last_mouse_pos.1 as isize,
-        ),
-        (
-            mouse_info.current_mouse_pos.0 as isize,
-            mouse_info.current_mouse_pos.1 as isize,
-        ),
-    ) {
-        for x in center_x - half_brush_size as isize..=center_x + half_brush_size as isize {
-            for y in center_y - half_brush_size as isize..=center_y + half_brush_size as isize {
-                world.set_cell(x as usize, y as usize, Cell::new(cell_to_place));
+    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(swapchain_format.into())],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+    });
+
+    let mut config = surface
+        .get_default_config(&adapter, size.width, size.height)
+        .unwrap();
+    surface.configure(&device, &config);
+
+    let window = &window;
+    event_loop
+        .run(move |event, target| {
+            // Have the closure take ownership of the resources.
+            // `event_loop.run` never returns, therefore we must do this to ensure
+            // the resources are properly cleaned up.
+            let _ = (&instance, &adapter, &shader, &pipeline_layout);
+
+            if let Event::WindowEvent {
+                window_id: _,
+                event,
+            } = event
+            {
+                match event {
+                    WindowEvent::Resized(new_size) => {
+                        // Reconfigure the surface with the new size
+                        config.width = new_size.width.max(1);
+                        config.height = new_size.height.max(1);
+                        surface.configure(&device, &config);
+                        // On macos the window needs to be redrawn manually after resizing
+                        window.request_redraw();
+                    }
+                    WindowEvent::RedrawRequested => {
+                        let frame = surface
+                            .get_current_texture()
+                            .expect("Failed to acquire next swap chain texture");
+                        let view = frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        let mut encoder =
+                            device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: None,
+                            });
+                        {
+                            let mut rpass =
+                                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                    label: None,
+                                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                        view: &view,
+                                        resolve_target: None,
+                                        ops: wgpu::Operations {
+                                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                                            store: wgpu::StoreOp::Store,
+                                        },
+                                    })],
+                                    depth_stencil_attachment: None,
+                                    timestamp_writes: None,
+                                    occlusion_query_set: None,
+                                });
+                            rpass.set_pipeline(&render_pipeline);
+                            rpass.draw(0..3, 0..1);
+                        }
+
+                        queue.submit(Some(encoder.finish()));
+                        frame.present();
+                    }
+                    WindowEvent::CloseRequested => target.exit(),
+                    _ => {}
+                };
             }
-        }
-    }
+        })
+        .unwrap();
 }
 
-fn log_error<E: std::error::Error + 'static>(method_name: &str, err: E) {
-    error!("{method_name}() failed: {err}");
-    for source in err.sources().skip(1) {
-        error!("  Caused by: {source}");
+pub fn main() {
+    let event_loop = EventLoop::new().unwrap();
+    #[allow(unused_mut)]
+    let mut builder = winit::window::WindowBuilder::new();
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsCast;
+        use winit::platform::web::WindowBuilderExtWebSys;
+        let canvas = web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .get_element_by_id("canvas")
+            .unwrap()
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .unwrap();
+        builder = builder.with_canvas(Some(canvas));
+    }
+    let window = builder.build(&event_loop).unwrap();
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        env_logger::init();
+        pollster::block_on(run(event_loop, window));
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+        console_log::init().expect("could not initialize logger");
+        wasm_bindgen_futures::spawn_local(run(event_loop, window));
     }
 }
