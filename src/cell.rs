@@ -1,6 +1,12 @@
 use crate::world::World;
 
-use self::{behaviour::{air::AirBehaviour, sand::SandBehaviour, solid::SolidBehaviour, water::WaterBehaviour, CellBehaviour}, id::CellId};
+use self::{
+    behaviour::{
+        air::AirBehaviour, sand::SandBehaviour, solid::SolidBehaviour, water::WaterBehaviour,
+        CellBehaviour,
+    },
+    id::CellId,
+};
 
 pub mod behaviour;
 pub mod id;
@@ -29,20 +35,26 @@ impl Cell {
                     velocity_x: 0.0,
                     collision_velocity_loss: 1.5,
                     friction: 0.9,
+                    density: 1.2,
                 }),
                 CellId::Stone => Box::new(SolidBehaviour),
-                CellId::Water => Box::new(WaterBehaviour { dispersion_rate: 2 }),
+                CellId::Water => Box::new(WaterBehaviour {
+                    dispersion_rate: 2,
+                    density: 1.0,
+                }),
                 CellId::Dirt => Box::new(SandBehaviour {
                     velocity_y: 1.0,
                     velocity_x: 0.0,
                     collision_velocity_loss: 1.7,
                     friction: 0.8,
+                    density: 1.3,
                 }),
                 CellId::Coal => Box::new(SandBehaviour {
                     velocity_y: 1.0,
                     velocity_x: 0.0,
                     collision_velocity_loss: 2.0,
                     friction: 0.7,
+                    density: 1.5,
                 }),
             },
 

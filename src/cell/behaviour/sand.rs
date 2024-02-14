@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use crate::world::World;
+use crate::{cell::Cell, world::World};
 
 use super::CellBehaviour;
 
@@ -10,10 +10,25 @@ pub struct SandBehaviour {
     pub velocity_x: f32,
     pub collision_velocity_loss: f32,
     pub friction: f32,
+    pub density: f32,
 }
 
 impl CellBehaviour for SandBehaviour {
     fn next_position(&mut self, x: usize, y: usize, world: &World) -> (usize, usize) {
+        let strategy: &dyn Fn(&Cell, isize, isize) -> bool = &|cell, _, _| {
+            if cell.id.is_air() {
+                return true;
+            }
+
+            if let Some(cell_density) = cell.behaviour.get_density() {
+                if cell_density < self.density {
+                    return true;
+                }
+            }
+
+            false
+        };
+
         if self.velocity_x.abs() > 0.95 {
             self.velocity_x *= self.friction;
             if self.velocity_x.abs() < 0.1 {
@@ -23,12 +38,13 @@ impl CellBehaviour for SandBehaviour {
 
         self.velocity_y += 0.1;
 
-        let (new_x, new_y) = self.check_cells_along_line(
+        let (new_x, new_y) = self.check_cells_along_line_strat(
             x as isize,
             y as isize,
             world,
             x as isize,
             (y as f32 + self.velocity_y) as isize,
+            strategy,
         );
 
         let dir = if rand::thread_rng().gen() { 1 } else { -1 };
@@ -46,12 +62,13 @@ impl CellBehaviour for SandBehaviour {
 
         for i in 0..=self.velocity_y as usize {
             let dx = x as isize + (i as isize * dir) + self.velocity_x as isize;
-            let (new_x, new_y) = self.check_cells_along_line(
+            let (new_x, new_y) = self.check_cells_along_line_strat(
                 x as isize,
                 y as isize,
                 world,
                 dx,
                 (y as f32 + self.velocity_y) as isize,
+                strategy,
             );
 
             if (new_x, new_y) != (x, y) {
@@ -61,12 +78,13 @@ impl CellBehaviour for SandBehaviour {
 
         for i in 0..=self.velocity_y as usize {
             let dx = x as isize + (i as isize * -dir) + self.velocity_x as isize;
-            let (new_x, new_y) = self.check_cells_along_line(
+            let (new_x, new_y) = self.check_cells_along_line_strat(
                 x as isize,
                 y as isize,
                 world,
                 dx,
                 (y as f32 + self.velocity_y) as isize,
+                strategy,
             );
 
             if (new_x, new_y) != (x, y) {
@@ -75,6 +93,10 @@ impl CellBehaviour for SandBehaviour {
         }
 
         (x, y)
+    }
+
+    fn get_density(&self) -> Option<f32> {
+        Some(self.density)
     }
 
     fn clone_box(&self) -> Box<dyn CellBehaviour> {

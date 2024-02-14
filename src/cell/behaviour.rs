@@ -11,6 +11,8 @@ pub mod water;
 
 pub trait CellBehaviour {
     fn next_position(&mut self, x: usize, y: usize, world: &World) -> (usize, usize);
+    fn get_density(&self) -> Option<f32>;
+
     fn clone_box(&self) -> Box<dyn CellBehaviour>;
 
     fn check_cells_along_line_strat(

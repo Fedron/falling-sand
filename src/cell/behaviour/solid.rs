@@ -9,6 +9,10 @@ impl CellBehaviour for SolidBehaviour {
         (x, y)
     }
 
+    fn get_density(&self) -> Option<f32> {
+        None
+    }
+
     fn clone_box(&self) -> Box<dyn CellBehaviour> {
         Box::new(SolidBehaviour)
     }
