@@ -1,9 +1,67 @@
 use std::borrow::Cow;
+use texture::Texture;
+use wgpu::util::DeviceExt;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::EventLoop,
     window::Window,
 };
+
+mod texture;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 2],
+    tex_coords: [f32; 2],
+}
+
+impl Vertex {
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+            ],
+        }
+    }
+}
+
+const VERTICES: &[Vertex] = &[
+    Vertex {
+        // Top-left
+        position: [-0.5, 0.5],
+        tex_coords: [0.0, 0.0],
+    },
+    Vertex {
+        // Top-right
+        position: [0.5, 0.5],
+        tex_coords: [1.0, 0.0],
+    },
+    Vertex {
+        // Bottom-right
+        position: [0.5, -0.5],
+        tex_coords: [1.0, 1.0],
+    },
+    Vertex {
+        // Bottom-left
+        position: [-0.5, -0.5],
+        tex_coords: [0.0, 1.0],
+    },
+];
+
+const INDICES: &[u16] = &[0, 1, 3, 1, 2, 3];
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut size = window.inner_size();
@@ -38,6 +96,56 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         .await
         .expect("Failed to create device");
 
+    let texture = Texture::new(&device, 64, 64);
+    let mut pixels: Vec<u8> = Vec::with_capacity(64 * 64 * 4);
+    for x in 0..64 {
+        for y in 0..64 {
+            let r = (x as f32 / 64.0 * 255.0) as u8;
+            let g = (y as f32 / 64.0 * 255.0) as u8;
+            let b = 0;
+            let a = 255;
+            pixels.push(r);
+            pixels.push(g);
+            pixels.push(b);
+            pixels.push(a);
+        }
+    }
+    texture.upload_pixels(&queue, &pixels);
+
+    let texture_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: texture.texture_binding(),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: texture.sampler_binding(),
+                    count: None,
+                },
+            ],
+        });
+
+    let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &texture_bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&texture.view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&texture.sampler),
+            },
+        ],
+    });
+
     // Load the shaders from disk
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
@@ -46,7 +154,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[],
+        bind_group_layouts: &[&texture_bind_group_layout],
         push_constant_ranges: &[],
     });
 
@@ -59,18 +167,34 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: "vs_main",
-            buffers: &[],
+            buffers: &[Vertex::desc()],
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
             entry_point: "fs_main",
             targets: &[Some(swapchain_format.into())],
         }),
-        primitive: wgpu::PrimitiveState::default(),
+        primitive: wgpu::PrimitiveState {
+            front_face: wgpu::FrontFace::Cw,
+            cull_mode: Some(wgpu::Face::Back),
+            ..Default::default()
+        },
         depth_stencil: None,
         multisample: wgpu::MultisampleState::default(),
         multiview: None,
     });
+
+    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Vertex Buffer"),
+        contents: bytemuck::cast_slice(VERTICES),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+    let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Index Buffer"),
+        contents: bytemuck::cast_slice(INDICES),
+        usage: wgpu::BufferUsages::INDEX,
+    });
+    let num_indices = INDICES.len() as u32;
 
     let mut config = surface
         .get_default_config(&adapter, size.width, size.height)
@@ -126,7 +250,16 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                                     timestamp_writes: None,
                                     occlusion_query_set: None,
                                 });
+
                             rpass.set_pipeline(&render_pipeline);
+                            rpass.set_bind_group(0, &texture_bind_group, &[]);
+                            rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                            rpass.set_index_buffer(
+                                index_buffer.slice(..),
+                                wgpu::IndexFormat::Uint16,
+                            );
+                            rpass.draw_indexed(0..num_indices, 0, 0..1);
+
                             rpass.draw(0..3, 0..1);
                         }
 
@@ -145,31 +278,8 @@ pub fn main() {
     let event_loop = EventLoop::new().unwrap();
     #[allow(unused_mut)]
     let mut builder = winit::window::WindowBuilder::new();
-    #[cfg(target_arch = "wasm32")]
-    {
-        use wasm_bindgen::JsCast;
-        use winit::platform::web::WindowBuilderExtWebSys;
-        let canvas = web_sys::window()
-            .unwrap()
-            .document()
-            .unwrap()
-            .get_element_by_id("canvas")
-            .unwrap()
-            .dyn_into::<web_sys::HtmlCanvasElement>()
-            .unwrap();
-        builder = builder.with_canvas(Some(canvas));
-    }
     let window = builder.build(&event_loop).unwrap();
 
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        env_logger::init();
-        pollster::block_on(run(event_loop, window));
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-        console_log::init().expect("could not initialize logger");
-        wasm_bindgen_futures::spawn_local(run(event_loop, window));
-    }
+    env_logger::init();
+    pollster::block_on(run(event_loop, window));
 }
