@@ -1,3 +1,4 @@
+use camera::{Camera, CameraUniform};
 use std::borrow::Cow;
 use texture::Texture;
 use wgpu::util::DeviceExt;
@@ -7,6 +8,7 @@ use winit::{
     window::Window,
 };
 
+mod camera;
 mod texture;
 
 #[repr(C)]
@@ -41,22 +43,22 @@ impl Vertex {
 const VERTICES: &[Vertex] = &[
     Vertex {
         // Top-left
-        position: [-0.5, 0.5],
+        position: [-100.0, 100.0],
         tex_coords: [0.0, 0.0],
     },
     Vertex {
         // Top-right
-        position: [0.5, 0.5],
+        position: [100.0, 100.0],
         tex_coords: [1.0, 0.0],
     },
     Vertex {
         // Bottom-right
-        position: [0.5, -0.5],
+        position: [100.0, -100.0],
         tex_coords: [1.0, 1.0],
     },
     Vertex {
         // Bottom-left
-        position: [-0.5, -0.5],
+        position: [-100.0, -100.0],
         tex_coords: [0.0, 1.0],
     },
 ];
@@ -152,9 +154,45 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
     });
 
+    let mut camera = Camera::new(size.width as f32, size.height as f32);
+    camera.position = (-(size.width as f32 / 2.0), -(size.height as f32 / 2.0), 0.0).into();
+
+    let mut camera_uniform = CameraUniform::new();
+    camera_uniform.update_view_projection(&camera);
+
+    let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: None,
+        contents: bytemuck::cast_slice(&[camera_uniform]),
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+
+    let camera_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+    let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &camera_bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: camera_buffer.as_entire_binding(),
+        }],
+    });
+
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&texture_bind_group_layout],
+        bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
         push_constant_ranges: &[],
     });
 
@@ -253,14 +291,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
                             rpass.set_pipeline(&render_pipeline);
                             rpass.set_bind_group(0, &texture_bind_group, &[]);
+                            rpass.set_bind_group(1, &camera_bind_group, &[]);
                             rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
                             rpass.set_index_buffer(
                                 index_buffer.slice(..),
                                 wgpu::IndexFormat::Uint16,
                             );
                             rpass.draw_indexed(0..num_indices, 0, 0..1);
-
-                            rpass.draw(0..3, 0..1);
                         }
 
                         queue.submit(Some(encoder.finish()));
