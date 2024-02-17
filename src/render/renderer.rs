@@ -1,4 +1,4 @@
-use std::{borrow::Cow, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
 use crate::texture::Texture;
 
@@ -34,7 +34,7 @@ impl Vertex {
 }
 
 pub struct Renderer {
-    context: Rc<RenderContext>,
+    context: Rc<RefCell<RenderContext>>,
     render_pipeline: wgpu::RenderPipeline,
     texture_bind_group: wgpu::BindGroup,
     camera_bind_group: wgpu::BindGroup,
@@ -42,20 +42,19 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(
-        context: Rc<RenderContext>,
+        context: Rc<RefCell<RenderContext>>,
         texture: &Texture,
         camera_buffer: &wgpu::Buffer,
     ) -> Self {
-        let shader = context
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Render Pipeline Shader"),
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-            });
+        let c = context.borrow();
+
+        let shader = c.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Render Pipeline Shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
+        });
 
         let texture_bind_group_layout =
-            context
-                .device
+            c.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("Texture Bind Group Layout"),
                     entries: &[
@@ -74,26 +73,23 @@ impl Renderer {
                     ],
                 });
 
-        let texture_bind_group = context
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&texture.sampler),
-                    },
-                ],
-            });
+        let texture_bind_group = c.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                },
+            ],
+        });
 
         let camera_bind_group_layout =
-            context
-                .device
+            c.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: None,
                     entries: &[wgpu::BindGroupLayoutEntry {
@@ -108,51 +104,49 @@ impl Renderer {
                     }],
                 });
 
-        let camera_bind_group = context
+        let camera_bind_group = c.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+        });
+
+        let pipeline_layout = c
             .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &camera_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
-                }],
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
+                push_constant_ranges: &[],
             });
 
-        let pipeline_layout =
-            context
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Render Pipeline Layout"),
-                    bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
-                    push_constant_ranges: &[],
-                });
+        let render_pipeline = c
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Render Pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: "vs_main",
+                    buffers: &[Vertex::desc()],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: "fs_main",
+                    targets: &[Some(c.swapchain_format.into())],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+            });
 
-        let render_pipeline =
-            context
-                .device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("Render Pipeline"),
-                    layout: Some(&pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader,
-                        entry_point: "vs_main",
-                        buffers: &[Vertex::desc()],
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &shader,
-                        entry_point: "fs_main",
-                        targets: &[Some(context.swapchain_format.into())],
-                    }),
-                    primitive: wgpu::PrimitiveState {
-                        front_face: wgpu::FrontFace::Cw,
-                        cull_mode: Some(wgpu::Face::Back),
-                        ..Default::default()
-                    },
-                    depth_stencil: None,
-                    multisample: wgpu::MultisampleState::default(),
-                    multiview: None,
-                });
+        drop(c);
 
         Self {
             context,
@@ -168,44 +162,42 @@ impl Renderer {
         index_buffer: &wgpu::Buffer,
         num_indices: u32,
     ) {
-        let frame = self
-            .context
-            .surface
-            .get_current_texture()
-            .expect("Failed to acquire next swap chain texture");
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .context
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
+        let context = self.context.borrow();
 
-            rpass.set_pipeline(&self.render_pipeline);
-            rpass.set_bind_group(0, &self.texture_bind_group, &[]);
-            rpass.set_bind_group(1, &self.camera_bind_group, &[]);
+        if let Ok(frame) = context.surface.get_current_texture() {
+            let view = frame
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            let mut encoder = context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            {
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
 
-            rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            rpass.draw_indexed(0..num_indices, 0, 0..1);
+                rpass.set_pipeline(&self.render_pipeline);
+                rpass.set_bind_group(0, &self.texture_bind_group, &[]);
+                rpass.set_bind_group(1, &self.camera_bind_group, &[]);
+
+                rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                rpass.draw_indexed(0..num_indices, 0, 0..1);
+            }
+
+            context.queue.submit(Some(encoder.finish()));
+            frame.present();
         }
-
-        self.context.queue.submit(Some(encoder.finish()));
-        frame.present();
     }
 }

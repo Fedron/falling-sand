@@ -5,6 +5,7 @@ pub struct RenderContext {
     _instance: wgpu::Instance,
     _adapter: wgpu::Adapter,
     pub surface: wgpu::Surface<'static>,
+    surface_config: wgpu::SurfaceConfiguration,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub swapchain_format: wgpu::TextureFormat,
@@ -41,19 +42,26 @@ impl RenderContext {
         let swapchain_format = swapchain_capabilities.formats[0];
 
         let size = window.inner_size();
-        let config = surface
+        let surface_config = surface
             .get_default_config(&adapter, size.width, size.height)
             .unwrap();
-        surface.configure(&device, &config);
+        surface.configure(&device, &surface_config);
 
         Self {
             _window: window,
             _instance: instance,
             _adapter: adapter,
             surface,
+            surface_config,
             device,
             queue,
             swapchain_format,
         }
+    }
+
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        self.surface_config.width = new_size.width.max(1);
+        self.surface_config.height = new_size.height.max(1);
+        self.surface.configure(&self.device, &self.surface_config);
     }
 }

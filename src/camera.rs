@@ -13,6 +13,10 @@ impl Camera {
         }
     }
 
+    pub fn update_size(&mut self, width: f32, height: f32) {
+        self.projection = cgmath::ortho(0.0, width, 0.0, height, -1.0, 1.0);
+    }
+
     pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
         let view = cgmath::Matrix4::from_translation(-self.position.to_vec());
         self.projection * view
