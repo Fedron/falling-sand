@@ -1,4 +1,5 @@
 use camera::{Camera, CameraUniform};
+use chunk::Chunk;
 use render::{
     context::RenderContext,
     renderer::{Renderer, Vertex},
@@ -10,6 +11,8 @@ use window::{Application, WindowManager};
 use winit_input_helper::WinitInputHelper;
 
 mod camera;
+mod cell;
+mod chunk;
 mod render;
 mod texture;
 mod window;
@@ -43,9 +46,16 @@ struct FallingSandApplication {
     render_context: Rc<RefCell<RenderContext>>,
     renderer: Renderer,
 
+    last_update: std::time::Instant,
+    update_counter: usize,
+
     camera: Camera,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
+
+    chunk: Chunk,
+    texture: Texture,
+    texture_pixels: Vec<u8>,
 
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -60,21 +70,12 @@ impl FallingSandApplication {
 
         let context = render_context.borrow();
 
+        let chunk = Chunk::new();
         let texture = Texture::new(&context.device, 64, 64);
-        let mut pixels: Vec<u8> = Vec::with_capacity(64 * 64 * 4);
-        for x in 0..64 {
-            for y in 0..64 {
-                let r = (x as f32 / 64.0 * 255.0) as u8;
-                let g = (y as f32 / 64.0 * 255.0) as u8;
-                let b = 0;
-                let a = 255;
-                pixels.push(r);
-                pixels.push(g);
-                pixels.push(b);
-                pixels.push(a);
-            }
+        let mut texture_pixels: Vec<u8> = Vec::with_capacity(64 * 64 * 4);
+        for _ in 0..64 * 64 {
+            texture_pixels.extend_from_slice(&[0, 0, 0, 0]);
         }
-        texture.upload_pixels(&context.queue, &pixels);
 
         let size = window.inner_size();
         let mut camera = Camera::new(size.width as f32, size.height as f32);
@@ -115,9 +116,16 @@ impl FallingSandApplication {
             render_context,
             renderer,
 
+            last_update: std::time::Instant::now(),
+            update_counter: 0,
+
             camera,
             camera_uniform,
             camera_buffer,
+
+            chunk,
+            texture,
+            texture_pixels,
 
             vertex_buffer,
             index_buffer,
@@ -127,9 +135,23 @@ impl FallingSandApplication {
 }
 
 impl Application for FallingSandApplication {
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        let now = std::time::Instant::now();
+        let delta_time = now.duration_since(self.last_update).as_secs_f32();
+        if delta_time < 0.2 {
+            return;
+        }
+
+        self.chunk.update(self.update_counter);
+        self.last_update = now;
+        self.update_counter += 1;
+    }
 
     fn draw(&mut self) {
+        self.chunk.draw(&mut self.texture_pixels);
+        self.texture
+            .upload_pixels(&self.render_context.borrow().queue, &self.texture_pixels);
+
         self.renderer
             .render(&self.vertex_buffer, &self.index_buffer, self.num_indices);
     }
