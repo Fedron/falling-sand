@@ -1,3 +1,4 @@
+use bbox::BoundingBox;
 use camera::{Camera, CameraUniform};
 use chunk::Chunk;
 use render::{pipeline::RenderPipeline2D, renderer::Renderer};
@@ -7,6 +8,7 @@ use wgpu::util::DeviceExt;
 use window::{Application, WindowManager};
 use winit_input_helper::WinitInputHelper;
 
+mod bbox;
 mod camera;
 mod cell;
 mod chunk;
@@ -26,6 +28,8 @@ struct FallingSandApplication {
     camera_buffer: wgpu::Buffer,
 
     chunk: Chunk,
+    chunk_bbox: BoundingBox,
+
     texture: Texture,
     texture_pixels: Vec<u8>,
     textured_quad: TexturedQuad,
@@ -36,13 +40,18 @@ impl FallingSandApplication {
         let renderer = pollster::block_on(Renderer::new(window.clone()));
 
         let chunk = Chunk::new();
+        let chunk_bbox = BoundingBox::from_center(
+            cgmath::Point2::new(0.0, 0.0),
+            cgmath::Point2::new(0.0, 0.0),
+            cgmath::Point2::new(128.0, 128.0),
+        );
+
         let texture = Texture::new(&renderer.device, 64, 64);
+        let textured_quad = TexturedQuad::new(&renderer.device, (128, 128));
         let mut texture_pixels: Vec<u8> = Vec::with_capacity(64 * 64 * 4);
         for _ in 0..64 * 64 {
             texture_pixels.extend_from_slice(&[0, 0, 0, 0]);
         }
-
-        let textured_quad = TexturedQuad::new(&renderer.device, (128, 128));
 
         let size = window.inner_size();
         let mut camera = Camera::new(size.width as f32, size.height as f32);
@@ -78,6 +87,8 @@ impl FallingSandApplication {
             camera_buffer,
 
             chunk,
+            chunk_bbox,
+
             texture,
             texture_pixels,
             textured_quad,
@@ -122,6 +133,18 @@ impl Application for FallingSandApplication {
                 0,
                 bytemuck::cast_slice(&[self.camera_uniform]),
             )
+        }
+
+        if input.mouse_held(0) {
+            if let Some((x, y)) = input.cursor() {
+                let world_pos = self
+                    .camera
+                    .window_pos_to_world_pos((x as f32, y as f32).into());
+
+                if self.chunk_bbox.contains(world_pos.into()) {
+                    println!("In chunk: {:?}", world_pos);
+                }
+            }
         }
     }
 }
