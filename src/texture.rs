@@ -95,7 +95,7 @@ impl TexturedQuad {
     const VERTICES: [Vertex; 4] = [
         Vertex {
             // Top-left
-            position: [-1.0, 1.0],
+            position: [0.0, 1.0],
             tex_coords: [0.0, 0.0],
         },
         Vertex {
@@ -105,12 +105,12 @@ impl TexturedQuad {
         },
         Vertex {
             // Bottom-right
-            position: [1.0, -1.0],
+            position: [1.0, 0.0],
             tex_coords: [1.0, 1.0],
         },
         Vertex {
             // Bottom-left
-            position: [-1.0, -1.0],
+            position: [0.0, 0.0],
             tex_coords: [0.0, 1.0],
         },
     ];
@@ -122,8 +122,8 @@ impl TexturedQuad {
 
         let mut vertices = Self::VERTICES.to_vec();
         for vertex in &mut vertices {
-            vertex.position[0] *= quad_size.0 as f32 / 2.0;
-            vertex.position[1] *= quad_size.1 as f32 / 2.0;
+            vertex.position[0] *= quad_size.0 as f32;
+            vertex.position[1] *= quad_size.1 as f32;
         }
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

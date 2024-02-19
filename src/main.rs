@@ -40,11 +40,10 @@ impl FallingSandApplication {
         let renderer = pollster::block_on(Renderer::new(window.clone()));
 
         let chunk = Chunk::new();
-        let chunk_bbox = BoundingBox::from_center(
-            cgmath::Point2::new(0.0, 0.0),
-            cgmath::Point2::new(0.0, 0.0),
-            cgmath::Point2::new(128.0, 128.0),
-        );
+        let chunk_bbox = BoundingBox {
+            min: (0.0, 0.0).into(),
+            max: (128.0, 128.0).into(),
+        };
 
         let texture = Texture::new(&renderer.device, 64, 64);
         let textured_quad = TexturedQuad::new(&renderer.device, (128, 128));
