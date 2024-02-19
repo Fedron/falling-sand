@@ -16,6 +16,26 @@ mod render;
 mod texture;
 mod window;
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ModelUniform {
+    model: [[f32; 4]; 4],
+}
+
+impl ModelUniform {
+    pub fn new() -> Self {
+        use cgmath::SquareMatrix;
+        Self {
+            model: cgmath::Matrix4::identity().into(),
+        }
+    }
+
+    pub fn update_model(&mut self, position: cgmath::Point3<f32>) {
+        use cgmath::EuclideanSpace;
+        self.model = cgmath::Matrix4::from_translation(position.to_vec()).into()
+    }
+}
+
 struct FallingSandApplication {
     renderer: Renderer,
     render_pipeline: RenderPipeline2D,
@@ -41,9 +61,20 @@ impl FallingSandApplication {
 
         let chunk = Chunk::new();
         let chunk_bbox = BoundingBox {
-            min: (0.0, 0.0).into(),
-            max: (128.0, 128.0).into(),
+            min: (128.0, 128.0).into(),
+            max: (256.0, 256.0).into(),
         };
+
+        let mut chunk_uniform = ModelUniform::new();
+        chunk_uniform.update_model((128.0, 128.0, 0.0).into());
+
+        let chunk_buffer = renderer
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Uniform Buffer"),
+                contents: bytemuck::cast_slice(&[chunk_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
 
         let texture = Texture::new(&renderer.device, 64, 64);
         let textured_quad = TexturedQuad::new(&renderer.device, (128, 128));
@@ -53,8 +84,7 @@ impl FallingSandApplication {
         }
 
         let size = window.inner_size();
-        let mut camera = Camera::new(size.width as f32, size.height as f32);
-        camera.position = (-(size.width as f32 / 2.0), -(size.height as f32 / 2.0), 0.0).into();
+        let camera = Camera::new(size.width as f32, size.height as f32);
 
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_projection(&camera);
@@ -62,7 +92,7 @@ impl FallingSandApplication {
         let camera_buffer = renderer
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
+                label: Some("Camera Uniform Buffer"),
                 contents: bytemuck::cast_slice(&[camera_uniform]),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
@@ -72,6 +102,7 @@ impl FallingSandApplication {
             renderer.swapchain_format.into(),
             &texture,
             &camera_buffer,
+            &chunk_buffer,
         );
 
         Self {

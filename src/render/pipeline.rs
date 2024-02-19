@@ -37,6 +37,7 @@ pub struct RenderPipeline2D {
     render_pipeline: wgpu::RenderPipeline,
     texture_bind_group: wgpu::BindGroup,
     camera_bind_group: wgpu::BindGroup,
+    model_bind_group: wgpu::BindGroup,
 }
 
 impl RenderPipeline2D {
@@ -45,6 +46,7 @@ impl RenderPipeline2D {
         swapchain_format: wgpu::ColorTargetState,
         texture: &Texture,
         camera_buffer: &wgpu::Buffer,
+        model_buffer: &wgpu::Buffer,
     ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Render Pipeline Shader"),
@@ -109,9 +111,37 @@ impl RenderPipeline2D {
             }],
         });
 
+        let model_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let model_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: model_buffer.as_entire_binding(),
+            }],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
+            bind_group_layouts: &[
+                &texture_bind_group_layout,
+                &camera_bind_group_layout,
+                &model_bind_group_layout,
+            ],
             push_constant_ranges: &[],
         });
 
@@ -142,6 +172,7 @@ impl RenderPipeline2D {
             render_pipeline,
             texture_bind_group,
             camera_bind_group,
+            model_bind_group,
         }
     }
 
@@ -166,6 +197,7 @@ impl RenderPipeline2D {
         rpass.set_pipeline(&self.render_pipeline);
         rpass.set_bind_group(0, &self.texture_bind_group, &[]);
         rpass.set_bind_group(1, &self.camera_bind_group, &[]);
+        rpass.set_bind_group(2, &self.model_bind_group, &[]);
 
         rpass.set_vertex_buffer(0, textured_quad.vertex_buffer.slice(..));
         rpass.set_index_buffer(

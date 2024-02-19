@@ -86,6 +86,8 @@ impl Texture {
 
 pub struct TexturedQuad {
     pub texture: Texture,
+    pub position: cgmath::Point2<f32>,
+
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_indices: u32,
@@ -142,6 +144,8 @@ impl TexturedQuad {
 
         Self {
             texture,
+            position: cgmath::Point2::new(0.0, 0.0),
+
             vertex_buffer,
             index_buffer,
             num_indices,
