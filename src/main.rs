@@ -1,10 +1,10 @@
 use camera::{Camera, CameraUniform};
 use chunk::Chunk;
 use render::{
-    context::RenderContext,
-    renderer::{Renderer, Vertex},
+    pipeline::{RenderPipeline2D, Vertex},
+    renderer::Renderer,
 };
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::sync::Arc;
 use texture::Texture;
 use wgpu::util::DeviceExt;
 use window::{Application, WindowManager};
@@ -43,8 +43,8 @@ const VERTICES: &[Vertex] = &[
 const INDICES: &[u16] = &[0, 1, 3, 1, 2, 3];
 
 struct FallingSandApplication {
-    render_context: Rc<RefCell<RenderContext>>,
     renderer: Renderer,
+    render_pipeline: RenderPipeline2D,
 
     last_update: std::time::Instant,
     update_counter: usize,
@@ -64,14 +64,10 @@ struct FallingSandApplication {
 
 impl FallingSandApplication {
     pub fn new(window: Arc<winit::window::Window>) -> Self {
-        let render_context = Rc::new(RefCell::new(pollster::block_on(RenderContext::new(
-            window.clone(),
-        ))));
-
-        let context = render_context.borrow();
+        let renderer = pollster::block_on(Renderer::new(window.clone()));
 
         let chunk = Chunk::new();
-        let texture = Texture::new(&context.device, 64, 64);
+        let texture = Texture::new(&renderer.device, 64, 64);
         let mut texture_pixels: Vec<u8> = Vec::with_capacity(64 * 64 * 4);
         for _ in 0..64 * 64 {
             texture_pixels.extend_from_slice(&[0, 0, 0, 0]);
@@ -84,7 +80,7 @@ impl FallingSandApplication {
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_projection(&camera);
 
-        let camera_buffer = context
+        let camera_buffer = renderer
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
@@ -92,16 +88,21 @@ impl FallingSandApplication {
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
-        let renderer = Renderer::new(render_context.clone(), &texture, &camera_buffer);
+        let render_pipeline = RenderPipeline2D::new(
+            &renderer.device,
+            renderer.swapchain_format.into(),
+            &texture,
+            &camera_buffer,
+        );
 
-        let vertex_buffer = context
+        let vertex_buffer = renderer
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(VERTICES),
                 usage: wgpu::BufferUsages::VERTEX,
             });
-        let index_buffer = context
+        let index_buffer = renderer
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
@@ -110,11 +111,9 @@ impl FallingSandApplication {
             });
         let num_indices = INDICES.len() as u32;
 
-        drop(context);
-
         Self {
-            render_context,
             renderer,
+            render_pipeline,
 
             last_update: std::time::Instant::now(),
             update_counter: 0,
@@ -150,22 +149,28 @@ impl Application for FallingSandApplication {
     fn draw(&mut self) {
         self.chunk.draw(&mut self.texture_pixels);
         self.texture
-            .upload_pixels(&self.render_context.borrow().queue, &self.texture_pixels);
+            .upload_pixels(&self.renderer.queue, &self.texture_pixels);
 
-        self.renderer
-            .render(&self.vertex_buffer, &self.index_buffer, self.num_indices);
+        if let Some(mut frame) = self.renderer.begin_render() {
+            self.render_pipeline.render(
+                &mut frame,
+                &self.vertex_buffer,
+                &self.index_buffer,
+                self.num_indices,
+            );
+            self.renderer.finish_render(frame);
+        }
     }
 
     fn handle_input(&mut self, input: &WinitInputHelper) {
         if let Some(new_size) = input.window_resized() {
-            self.render_context.borrow_mut().resize(new_size);
+            self.renderer.resize(new_size);
 
             self.camera
                 .update_size(new_size.width as f32, new_size.height as f32);
             self.camera_uniform.update_view_projection(&self.camera);
 
-            let context = self.render_context.borrow();
-            context.queue.write_buffer(
+            self.renderer.queue.write_buffer(
                 &self.camera_buffer,
                 0,
                 bytemuck::cast_slice(&[self.camera_uniform]),
