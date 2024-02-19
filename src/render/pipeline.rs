@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::texture::Texture;
+use crate::texture::{Texture, TexturedQuad};
 
 use super::renderer::Frame;
 
@@ -145,13 +145,7 @@ impl RenderPipeline2D {
         }
     }
 
-    pub fn render(
-        &self,
-        frame: &mut Frame,
-        vertex_buffer: &wgpu::Buffer,
-        index_buffer: &wgpu::Buffer,
-        num_indices: u32,
-    ) {
+    pub fn render(&self, frame: &mut Frame, textured_quad: &TexturedQuad) {
         let mut rpass = frame
             .encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -173,8 +167,11 @@ impl RenderPipeline2D {
         rpass.set_bind_group(0, &self.texture_bind_group, &[]);
         rpass.set_bind_group(1, &self.camera_bind_group, &[]);
 
-        rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
-        rpass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        rpass.draw_indexed(0..num_indices, 0, 0..1);
+        rpass.set_vertex_buffer(0, textured_quad.vertex_buffer.slice(..));
+        rpass.set_index_buffer(
+            textured_quad.index_buffer.slice(..),
+            wgpu::IndexFormat::Uint16,
+        );
+        rpass.draw_indexed(0..textured_quad.num_indices, 0, 0..1);
     }
 }

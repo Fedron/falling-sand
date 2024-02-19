@@ -1,11 +1,8 @@
 use camera::{Camera, CameraUniform};
 use chunk::Chunk;
-use render::{
-    pipeline::{RenderPipeline2D, Vertex},
-    renderer::Renderer,
-};
+use render::{pipeline::RenderPipeline2D, renderer::Renderer};
 use std::sync::Arc;
-use texture::Texture;
+use texture::{Texture, TexturedQuad};
 use wgpu::util::DeviceExt;
 use window::{Application, WindowManager};
 use winit_input_helper::WinitInputHelper;
@@ -16,31 +13,6 @@ mod chunk;
 mod render;
 mod texture;
 mod window;
-
-const VERTICES: &[Vertex] = &[
-    Vertex {
-        // Top-left
-        position: [-100.0, 100.0],
-        tex_coords: [0.0, 0.0],
-    },
-    Vertex {
-        // Top-right
-        position: [100.0, 100.0],
-        tex_coords: [1.0, 0.0],
-    },
-    Vertex {
-        // Bottom-right
-        position: [100.0, -100.0],
-        tex_coords: [1.0, 1.0],
-    },
-    Vertex {
-        // Bottom-left
-        position: [-100.0, -100.0],
-        tex_coords: [0.0, 1.0],
-    },
-];
-
-const INDICES: &[u16] = &[0, 1, 3, 1, 2, 3];
 
 struct FallingSandApplication {
     renderer: Renderer,
@@ -56,10 +28,7 @@ struct FallingSandApplication {
     chunk: Chunk,
     texture: Texture,
     texture_pixels: Vec<u8>,
-
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_indices: u32,
+    textured_quad: TexturedQuad,
 }
 
 impl FallingSandApplication {
@@ -72,6 +41,8 @@ impl FallingSandApplication {
         for _ in 0..64 * 64 {
             texture_pixels.extend_from_slice(&[0, 0, 0, 0]);
         }
+
+        let textured_quad = TexturedQuad::new(&renderer.device, (128, 128));
 
         let size = window.inner_size();
         let mut camera = Camera::new(size.width as f32, size.height as f32);
@@ -95,22 +66,6 @@ impl FallingSandApplication {
             &camera_buffer,
         );
 
-        let vertex_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(VERTICES),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-        let num_indices = INDICES.len() as u32;
-
         Self {
             renderer,
             render_pipeline,
@@ -125,10 +80,7 @@ impl FallingSandApplication {
             chunk,
             texture,
             texture_pixels,
-
-            vertex_buffer,
-            index_buffer,
-            num_indices,
+            textured_quad,
         }
     }
 }
@@ -152,12 +104,7 @@ impl Application for FallingSandApplication {
             .upload_pixels(&self.renderer.queue, &self.texture_pixels);
 
         if let Some(mut frame) = self.renderer.begin_render() {
-            self.render_pipeline.render(
-                &mut frame,
-                &self.vertex_buffer,
-                &self.index_buffer,
-                self.num_indices,
-            );
+            self.render_pipeline.render(&mut frame, &self.textured_quad);
             self.renderer.finish_render(frame);
         }
     }

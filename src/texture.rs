@@ -1,3 +1,7 @@
+use wgpu::util::DeviceExt;
+
+use crate::render::pipeline::Vertex;
+
 pub struct Texture {
     width: usize,
     height: usize,
@@ -77,5 +81,70 @@ impl Texture {
             },
             self.extent,
         );
+    }
+}
+
+pub struct TexturedQuad {
+    pub texture: Texture,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_indices: u32,
+}
+
+impl TexturedQuad {
+    const VERTICES: [Vertex; 4] = [
+        Vertex {
+            // Top-left
+            position: [-1.0, 1.0],
+            tex_coords: [0.0, 0.0],
+        },
+        Vertex {
+            // Top-right
+            position: [1.0, 1.0],
+            tex_coords: [1.0, 0.0],
+        },
+        Vertex {
+            // Bottom-right
+            position: [1.0, -1.0],
+            tex_coords: [1.0, 1.0],
+        },
+        Vertex {
+            // Bottom-left
+            position: [-1.0, -1.0],
+            tex_coords: [0.0, 1.0],
+        },
+    ];
+
+    const INDICES: [u16; 6] = [0, 1, 3, 1, 2, 3];
+
+    pub fn new(device: &wgpu::Device, quad_size: (usize, usize)) -> Self {
+        let texture = Texture::new(&device, quad_size.0, quad_size.1);
+
+        let mut vertices = Self::VERTICES.to_vec();
+        for vertex in &mut vertices {
+            vertex.position[0] *= quad_size.0 as f32 / 2.0;
+            vertex.position[1] *= quad_size.1 as f32 / 2.0;
+        }
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("TexturedQuad Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("TexturedQuad Index Buffer"),
+            contents: bytemuck::cast_slice(&Self::INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let num_indices = Self::INDICES.len() as u32;
+
+        Self {
+            texture,
+            vertex_buffer,
+            index_buffer,
+            num_indices,
+        }
     }
 }
