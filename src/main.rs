@@ -1,10 +1,9 @@
 use bbox::BoundingBox;
-use camera::{Camera, CameraUniform};
+use camera::Camera;
 use chunk::Chunk;
+use quad::Quad;
 use render::{drawable::Drawable, pipeline::RenderPipeline2D, renderer::Renderer};
-use std::sync::Arc;
-use texture::{Texture, TexturedQuad};
-use wgpu::util::DeviceExt;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 use window::{Application, WindowManager};
 use winit_input_helper::WinitInputHelper;
 
@@ -12,6 +11,7 @@ mod bbox;
 mod camera;
 mod cell;
 mod chunk;
+mod quad;
 mod render;
 mod texture;
 mod window;
@@ -37,27 +37,25 @@ impl ModelUniform {
 }
 
 struct FallingSandApplication {
-    renderer: Renderer,
+    renderer: Rc<RefCell<Renderer>>,
     render_pipeline: RenderPipeline2D,
 
     last_update: std::time::Instant,
     update_counter: usize,
 
     camera: Camera,
-    camera_uniform: CameraUniform,
-    camera_buffer: wgpu::Buffer,
 
     chunk: Chunk,
     chunk_bbox: BoundingBox,
-
-    texture: Texture,
-    texture_pixels: Vec<u8>,
-    textured_quad: TexturedQuad,
+    chunk_quad: Quad,
+    chunk_pixels: Vec<u8>,
 }
 
 impl FallingSandApplication {
     pub fn new(window: Arc<winit::window::Window>) -> Self {
-        let renderer = pollster::block_on(Renderer::new(window.clone()));
+        let renderer = Rc::new(RefCell::new(pollster::block_on(Renderer::new(
+            window.clone(),
+        ))));
 
         let chunk = Chunk::new();
         let chunk_bbox = BoundingBox {
@@ -65,45 +63,18 @@ impl FallingSandApplication {
             max: (256.0, 256.0).into(),
         };
 
-        let mut chunk_uniform = ModelUniform::new();
-        chunk_uniform.update_model((128.0, 128.0, 0.0).into());
-
-        let chunk_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Uniform Buffer"),
-                contents: bytemuck::cast_slice(&[chunk_uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-
-        let texture = Texture::new(&renderer.device, 64, 64);
-        let textured_quad = TexturedQuad::new(&renderer.device, (128, 128));
-        let mut texture_pixels: Vec<u8> = Vec::with_capacity(64 * 64 * 4);
+        let chunk_quad = Quad::new(&renderer.borrow().device, (128, 128));
+        let mut chunk_pixels: Vec<u8> = Vec::with_capacity(64 * 64 * 4);
         for _ in 0..64 * 64 {
-            texture_pixels.extend_from_slice(&[0, 0, 0, 0]);
+            chunk_pixels.extend_from_slice(&[0, 0, 0, 0]);
         }
 
         let size = window.inner_size();
         let camera = Camera::new(size.width as f32, size.height as f32);
 
-        let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_projection(&camera);
-
-        let camera_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Camera Uniform Buffer"),
-                contents: bytemuck::cast_slice(&[camera_uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-
-        let render_pipeline = RenderPipeline2D::new(
-            &renderer.device,
-            renderer.swapchain_format.into(),
-            &texture,
-            &camera_buffer,
-            &chunk_buffer,
-        );
+        let mut render_pipeline = RenderPipeline2D::new(renderer.clone());
+        render_pipeline.update_camera(&camera);
+        render_pipeline.update_model((128.0, 128.0, 0.0).into());
 
         Self {
             renderer,
@@ -113,15 +84,11 @@ impl FallingSandApplication {
             update_counter: 0,
 
             camera,
-            camera_uniform,
-            camera_buffer,
 
             chunk,
             chunk_bbox,
-
-            texture,
-            texture_pixels,
-            textured_quad,
+            chunk_quad,
+            chunk_pixels,
         }
     }
 }
@@ -140,34 +107,30 @@ impl Application for FallingSandApplication {
     }
 
     fn draw(&mut self) {
-        self.chunk.draw(&mut self.texture_pixels);
-        self.texture
-            .upload_pixels(&self.renderer.queue, &self.texture_pixels);
+        self.chunk.draw(&mut self.chunk_pixels);
+        self.render_pipeline
+            .texture
+            .upload_pixels(&self.renderer.borrow().queue, &self.chunk_pixels);
 
-        if let Some(mut frame) = self.renderer.begin_render() {
+        let mut renderer = self.renderer.borrow_mut();
+        if let Some(mut frame) = renderer.begin_render() {
             {
-                let mut render_pass = self.renderer.create_default_render_pass(&mut frame);
+                let mut render_pass = renderer.create_default_render_pass(&mut frame);
                 self.render_pipeline.prepare(&mut render_pass);
-                self.textured_quad.draw(&mut render_pass);
+                self.chunk_quad.draw(&mut render_pass);
             }
 
-            self.renderer.finish_render(frame);
+            renderer.finish_render(frame);
         }
     }
 
     fn handle_input(&mut self, input: &WinitInputHelper) {
         if let Some(new_size) = input.window_resized() {
-            self.renderer.resize(new_size);
+            self.renderer.borrow_mut().resize(new_size);
 
             self.camera
                 .update_size(new_size.width as f32, new_size.height as f32);
-            self.camera_uniform.update_view_projection(&self.camera);
-
-            self.renderer.queue.write_buffer(
-                &self.camera_buffer,
-                0,
-                bytemuck::cast_slice(&[self.camera_uniform]),
-            )
+            self.render_pipeline.update_camera(&self.camera);
         }
 
         if input.mouse_held(0) {
