@@ -1,7 +1,7 @@
 use bbox::BoundingBox;
 use camera::{Camera, CameraUniform};
 use chunk::Chunk;
-use render::{pipeline::RenderPipeline2D, renderer::Renderer};
+use render::{drawable::Drawable, pipeline::RenderPipeline2D, renderer::Renderer};
 use std::sync::Arc;
 use texture::{Texture, TexturedQuad};
 use wgpu::util::DeviceExt;
@@ -145,7 +145,12 @@ impl Application for FallingSandApplication {
             .upload_pixels(&self.renderer.queue, &self.texture_pixels);
 
         if let Some(mut frame) = self.renderer.begin_render() {
-            self.render_pipeline.render(&mut frame, &self.textured_quad);
+            {
+                let mut render_pass = self.renderer.create_default_render_pass(&mut frame);
+                self.render_pipeline.prepare(&mut render_pass);
+                self.textured_quad.draw(&mut render_pass);
+            }
+
             self.renderer.finish_render(frame);
         }
     }

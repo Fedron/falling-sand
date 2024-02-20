@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 
-use crate::texture::{Texture, TexturedQuad};
-
-use super::renderer::Frame;
+use crate::texture::Texture;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -176,34 +174,10 @@ impl RenderPipeline2D {
         }
     }
 
-    pub fn render(&self, frame: &mut Frame, textured_quad: &TexturedQuad) {
-        let mut rpass = frame
-            .encoder
-            .begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame.view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-        rpass.set_pipeline(&self.render_pipeline);
-        rpass.set_bind_group(0, &self.texture_bind_group, &[]);
-        rpass.set_bind_group(1, &self.camera_bind_group, &[]);
-        rpass.set_bind_group(2, &self.model_bind_group, &[]);
-
-        rpass.set_vertex_buffer(0, textured_quad.vertex_buffer.slice(..));
-        rpass.set_index_buffer(
-            textured_quad.index_buffer.slice(..),
-            wgpu::IndexFormat::Uint16,
-        );
-        rpass.draw_indexed(0..textured_quad.num_indices, 0, 0..1);
+    pub fn prepare<'a: 'b, 'b>(&'a self, render_pass: &mut wgpu::RenderPass<'b>) {
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+        render_pass.set_bind_group(2, &self.model_bind_group, &[]);
     }
 }

@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::render::pipeline::Vertex;
+use crate::render::{drawable::Drawable, pipeline::Vertex};
 
 pub struct Texture {
     width: usize,
@@ -90,7 +90,6 @@ pub struct TexturedQuad {
 
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
-    pub num_indices: u32,
 }
 
 impl TexturedQuad {
@@ -140,15 +139,30 @@ impl TexturedQuad {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let num_indices = Self::INDICES.len() as u32;
-
         Self {
             texture,
             position: cgmath::Point2::new(0.0, 0.0),
 
             vertex_buffer,
             index_buffer,
-            num_indices,
         }
+    }
+}
+
+impl Drawable for TexturedQuad {
+    fn get_vertex_buffer(&self) -> &wgpu::Buffer {
+        &self.vertex_buffer
+    }
+
+    fn get_num_vertices(&self) -> u32 {
+        Self::VERTICES.len() as u32
+    }
+
+    fn get_index_buffer(&self) -> Option<&wgpu::Buffer> {
+        Some(&self.index_buffer)
+    }
+
+    fn get_num_indices(&self) -> Option<u32> {
+        Some(Self::INDICES.len() as u32)
     }
 }

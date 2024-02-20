@@ -76,6 +76,7 @@ impl Renderer {
             let view = frame
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
+
             let encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -88,6 +89,28 @@ impl Renderer {
         }
 
         None
+    }
+
+    pub fn create_default_render_pass<'a: 'b, 'b>(
+        &'a self,
+        frame: &'b mut Frame,
+    ) -> wgpu::RenderPass<'b> {
+        frame
+            .encoder
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &frame.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            })
     }
 
     pub fn finish_render(&self, frame: Frame) {
